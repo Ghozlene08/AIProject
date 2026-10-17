@@ -1,7 +1,7 @@
 {
-  "name": "mon-app-ia",
+  "name": "senior-assistant",
   "private": true,
-  "description": "Next.js (frontend) + Node.js/Express (backend) + MongoDB",
+  "description": "Senior Assistant — Next.js + Express + MongoDB",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -13,7 +13,9 @@
     "dev:back": "npm run dev --prefix backend",
     "dev:front": "npm run dev --prefix frontend",
     "db:check": "npm run db:check --prefix backend",
-    "lint": "npm run lint --prefix frontend"
+    "lint": "npm run lint --prefix frontend",
+    "seed": "npm run seed --prefix backend",
+    "test": "npm test --prefix backend"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

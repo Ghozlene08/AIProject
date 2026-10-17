@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-// Polices embarquées dans le projet (pas d'appel à Google Fonts au build)
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
+// Police Nunito Sans embarquée dans le projet (pas d'appel à Google Fonts)
+import "@fontsource-variable/nunito-sans";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "Mon App",
-  description: "Next.js + Node.js/Express + MongoDB",
+  title: {
+    default: "Senior Assistant — Votre voix, votre quotidien",
+    template: "%s · Senior Assistant",
+  },
+  description:
+    "Assistant vocal intelligent pour l'autonomie des personnes âgées, avec un espace dédié aux aidants.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="fr"
-      className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="fr" className="h-full antialiased">
+      <body className="min-h-full flex flex-col">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

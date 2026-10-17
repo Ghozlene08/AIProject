@@ -1,238 +1,132 @@
-# Mon App
+# Senior Assistant
 
-Projet web composé de :
+Application web d'assistance vocale intelligente pour l'autonomie des personnes âgées — ESPRIT, atelier mini-projet « IA for Software Engineering » (groupe CareAI).
 
-- **Frontend** : Next.js (React, TypeScript, Tailwind CSS)
-- **Backend** : Node.js + Express
-- **Base de données** : MongoDB (connexion via Mongoose)
+- **Frontend** : Next.js 16 (React 19, TypeScript, Tailwind CSS 4)
+- **Backend** : Node.js + Express 5 (API REST, JWT, planificateur de rappels)
+- **Base de données** : MongoDB via Mongoose
+- **Module IA** : passerelle avec anonymisation, fournisseurs de secours (Groq → Gemini → OpenRouter → générateur local) et validation des sorties
 
-Ce dépôt est un **environnement de départ** : le frontend affiche une page d'accueil et le backend se connecte à MongoDB. Aucune route d'API n'est encore créée.
-
----
-
-## Sommaire
-
-1. [Prérequis](#1-prérequis)
-2. [Installation](#2-installation)
-3. [Configuration (fichier .env)](#3-configuration-fichier-env)
-4. [Vérifier la connexion à MongoDB](#4-vérifier-la-connexion-à-mongodb)
-5. [Lancer le projet](#5-lancer-le-projet)
-6. [Architecture du projet](#6-architecture-du-projet)
-7. [Commandes disponibles](#7-commandes-disponibles)
-8. [Travailler en équipe avec Git](#8-travailler-en-équipe-avec-git)
-9. [Problèmes fréquents](#9-problèmes-fréquents)
+Modules livrés dans cette version : **page d'accueil**, **Espace Aidant**, **Espace Administration** (l'interface vocale Senior est un module séparé).
 
 ---
 
-## 1. Prérequis
+## 1. Démarrage rapide
 
-Installez ces outils avant de commencer :
+Prérequis : Node.js 22, MongoDB 7 ou 8 démarré en local (`sc query MongoDB` → `RUNNING`).
 
-| Outil | Version conseillée | Vérifier avec |
+```bash
+npm run setup     # installe les dépendances + crée backend/.env
+npm run seed      # remplit la base avec les données de démonstration
+npm run dev       # lance le backend (5000) et le frontend (3000)
+```
+
+Ouvrir http://localhost:3000.
+
+| Compte | E-mail | Mot de passe |
 |---|---|---|
-| Node.js | 22 (LTS) | `node -v` |
-| npm | fourni avec Node.js | `npm -v` |
-| Git | récent | `git --version` |
-| MongoDB Community Server | 7 ou 8 | `mongod --version` |
-| MongoDB Compass | optionnel, pour visualiser la base | — |
+| Aidant | sophie.martin@exemple.com | Aidant123! |
+| Administrateur | admin@senior-assistant.tn | Admin123! |
+| Senior (appairage) | code `MARIE7` | PIN `1234` |
 
-Sous Windows, MongoDB tourne comme un **service**. Pour vérifier qu'il est démarré :
+> ⚠️ `npm run seed` **vide** les collections avant de les remplir.
 
-```bash
-sc query MongoDB
-```
-
-Vous devez voir `STATE : 4 RUNNING`. Sinon, dans un terminal ouvert **en tant qu'administrateur** :
-
-```bash
-net start MongoDB
-```
-
----
-
-## 2. Installation
-
-```bash
-git clone https://github.com/<votre-compte>/mon-app-ia.git
-cd mon-app-ia
-npm run setup
-```
-
-La commande `npm run setup` :
-
-1. installe les dépendances de la racine, du backend et du frontend (dossiers `node_modules`) ;
-2. crée le fichier `backend/.env` à partir du modèle `backend/.env.example`.
-
----
-
-## 3. Configuration (fichier .env)
-
-Le fichier `backend/.env` contient les réglages du backend :
-
-```env
-PORT=5000
-CLIENT_URL=http://localhost:3000
-MONGODB_URI=mongodb://localhost:27017/mon-app-ia
-```
+## 2. Configuration (`backend/.env`)
 
 | Variable | Rôle |
 |---|---|
-| `PORT` | port sur lequel démarre le backend |
-| `CLIENT_URL` | adresse du frontend, autorisée à appeler le backend |
-| `MONGODB_URI` | adresse de la base MongoDB (`localhost` = votre PC, `27017` = port par défaut, `mon-app-ia` = nom de la base) |
+| `PORT` | Port du backend (5000) |
+| `CLIENT_URL` | Origine autorisée (CORS) du frontend |
+| `MONGODB_URI` | Base MongoDB (`mongodb://localhost:27017/senior-assistant`) |
+| `JWT_SECRET`, `JWT_EXPIRES_IN` | Signature et durée des sessions |
+| `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY` | Clés gratuites des LLM (facultatives) |
+| `TELEGRAM_BOT_TOKEN` | Bot Telegram pour les alertes « prise manquée » (facultatif) |
 
-Avec MongoDB installé en local, **aucune modification n'est nécessaire**.
+Sans clé API, la passerelle utilise le **générateur local** : l'application reste entièrement fonctionnelle à 0 €.
+Le frontend lit `NEXT_PUBLIC_API_URL` (par défaut `http://localhost:5000/api`, voir `frontend/.env.example`).
 
-> ⚠️ `backend/.env` est propre à chaque machine et peut contenir des informations sensibles (mots de passe, clés). Il est ignoré par Git (voir `.gitignore`) et ne doit **jamais** être envoyé sur GitHub. Seul le modèle `backend/.env.example`, sans secrets, est partagé.
+## 3. Fonctionnalités
 
----
+**Page d'accueil** (`/`) : présentation, choix de l'espace (Senior, Aidant, Administration), modules F1 à F6.
 
-## 4. Vérifier la connexion à MongoDB
+**Espace Aidant** (`/aidant`) — connexion ou inscription (`/inscription`)
+- Tableau de bord : état du senior, prises du jour, rendez-vous, alertes, prochaines activités, synthèse
+- Profil du senior : informations, médecin, contacts d'urgence, code d'appairage + PIN
+- Traitements : médicaments et horaires (les prises quotidiennes sont générées automatiquement)
+- Agenda : vue semaine, rendez-vous, repas, activités, prises
+- Suivi des prises : jour par jour, correction manuelle, historique 7 jours
+- Alertes : filtres, lu / non lu, envoi Telegram
+- Synthèse hebdomadaire générée par l'IA
+- Paramètres : compte, notifications (e-mail, Telegram, SMS), mot de passe
 
-```bash
-npm run db:check
-```
+**Administration** (`/admin`)
+- Supervision IA : état des fournisseurs, appels du jour, taux de succès, latence, test de la passerelle
+- Journaux des appels IA : filtres, pagination, prompt anonymisé et jetons
+- Fournisseurs IA : activation, priorité de bascule, **panne simulée** (critère d'acceptation n° 8)
+- Utilisateurs : création, rôles, statut, suppression
 
-Résultat attendu :
+**Planificateur** (toutes les minutes) : crée les prises du jour, compte les rappels et passe une prise en « manquée » après 2 rappels sans confirmation (30 min) → alerte + Telegram.
 
-```
-✅ MongoDB connecté (mongodb://localhost:27017/mon-app-ia)
-   Version du serveur : 8.0.x
-   Base : mon-app-ia
-   Collections : (aucune pour l'instant)
-```
+## 4. API REST (préfixe `/api`)
 
-Dans **MongoDB Compass**, connectez-vous à `mongodb://localhost:27017`. La base `mon-app-ia` apparaîtra dès que la première donnée y sera enregistrée.
-
----
-
-## 5. Lancer le projet
-
-```bash
-npm run dev
-```
-
-Cette commande lance le backend et le frontend en même temps :
-
-| Partie | Adresse | Message attendu dans le terminal |
+| Méthode | Route | Rôle |
 |---|---|---|
-| Frontend | http://localhost:3000 | `Ready` |
-| Backend | http://localhost:5000 | `✅ MongoDB connecté` puis `🚀 Serveur démarré` |
+| POST | `/auth/register`, `/auth/login` | Inscription aidant, connexion |
+| GET/PUT | `/auth/me`, PUT `/auth/password` | Compte connecté |
+| GET/POST | `/aidant/seniors` | Proches suivis |
+| GET/PUT | `/aidant/seniors/:id` | Profil (+ contacts) |
+| POST | `/aidant/seniors/:id/pairing` | Nouveau code d'appairage + PIN |
+| GET | `/aidant/seniors/:id/dashboard` | Tableau de bord |
+| CRUD | `/aidant/seniors/:id/contacts`, `/medications`, `/events` | Contacts, traitements, agenda |
+| GET/PATCH | `/aidant/seniors/:id/intakes`, GET `/adherence` | Prises, observance |
+| GET/PATCH | `/aidant/seniors/:id/alerts`, PATCH `/alerts/read-all` | Alertes |
+| GET/POST | `/aidant/seniors/:id/summaries` | Synthèses hebdomadaires |
+| GET | `/admin/overview`, `/admin/ai-calls` | Supervision, journaux |
+| GET/PUT | `/admin/providers` | Fournisseurs IA |
+| POST | `/admin/ai/test` | Test de la passerelle |
+| CRUD | `/admin/users` | Utilisateurs |
 
-Pour les lancer séparément, dans deux terminaux : `npm run dev:back` et `npm run dev:front`.
-
-Arrêter : `Ctrl + C` dans le terminal.
-
----
-
-## 6. Architecture du projet
-
-```
-mon-app-ia/
-├── frontend/                  Application Next.js (interface utilisateur)
-│   ├── public/                Fichiers statiques (images, icônes)
-│   ├── src/
-│   │   └── app/               Pages et mise en page (App Router)
-│   │       ├── layout.tsx     Structure commune à toutes les pages
-│   │       ├── page.tsx       Page d'accueil ( / )
-│   │       └── globals.css    Styles globaux (Tailwind)
-│   ├── next.config.ts         Configuration de Next.js
-│   ├── tsconfig.json          Configuration de TypeScript
-│   ├── eslint.config.mjs      Règles de qualité du code
-│   └── package.json           Dépendances et commandes du frontend
-│
-├── backend/                   Serveur Node.js / Express
-│   ├── src/
-│   │   ├── config/
-│   │   │   └── db.js          Connexion à MongoDB
-│   │   ├── models/            Schémas des données MongoDB (à venir)
-│   │   ├── routes/            Définition des routes (à venir)
-│   │   ├── controllers/       Logique exécutée par chaque route (à venir)
-│   │   ├── middlewares/       Traitements communs : authentification, erreurs… (à venir)
-│   │   ├── app.js             Configuration d'Express
-│   │   └── server.js          Point d'entrée : connexion à la base puis démarrage
-│   ├── scripts/
-│   │   └── check-db.js        Test de connexion à MongoDB
-│   ├── .env.example           Modèle de configuration (partagé)
-│   ├── .env                   Configuration locale (non partagée, créée par npm run setup)
-│   └── package.json           Dépendances et commandes du backend
-│
-├── scripts/
-│   └── setup-env.js           Crée backend/.env lors de l'installation
-├── .editorconfig              Mise en forme commune (indentation, encodage)
-├── .gitattributes             Fins de ligne identiques sous Windows, macOS et Linux
-├── .gitignore                 Fichiers que Git ne doit pas envoyer (node_modules, .env…)
-├── .nvmrc                     Version de Node.js du projet (22)
-├── package.json               Commandes globales (setup, dev, db:check)
-└── README.md                  Ce fichier
-```
-
-### Rôle de chaque partie
-
-**`frontend/`** : tout ce que l'utilisateur voit dans son navigateur. Dans Next.js (App Router), chaque dossier de `src/app/` correspond à une page : par exemple, `src/app/contact/page.tsx` crée la page `/contact`.
-
-**`backend/`** : le serveur, invisible pour l'utilisateur. Il est le seul à communiquer avec la base de données. Son code est organisé en couches :
-
-| Dossier | Rôle | Exemple futur |
-|---|---|---|
-| `config/` | Configuration technique (connexion à la base…) | `db.js` |
-| `models/` | Forme des données stockées dans MongoDB | `User.js` : nom, email, mot de passe |
-| `routes/` | Adresses accessibles du serveur | `GET /users` |
-| `controllers/` | Ce que fait le serveur quand une route est appelée | lire les utilisateurs dans la base |
-| `middlewares/` | Code exécuté avant les routes | vérifier qu'un utilisateur est connecté |
-
-Le chemin d'une future requête sera :
+## 5. Architecture
 
 ```
-Navigateur (frontend) → route → middleware → controller → model → MongoDB
+frontend/src/
+├── app/
+│   ├── page.tsx                 Page d'accueil
+│   ├── connexion/, inscription/ Authentification
+│   ├── aidant/                  Espace Aidant (layout + 8 pages)
+│   └── admin/                   Administration (layout + 5 pages)
+├── components/                  Kit UI, coquille, graphiques SVG, logo
+└── lib/                         Client API, session (JWT), types, formats
+
+backend/src/
+├── models/                      User, Senior, Contact, Medication, Intake, Event, Alert, WeeklySummary, AiProvider, AiCall
+├── controllers/, routes/        auth, aidant, admin
+├── middlewares/                 auth (JWT + rôles + accès au senior), erreurs
+└── services/
+    ├── ai/                      gateway, anonymizer, validator, providers, defaults
+    ├── scheduler.js             Rappels et prises manquées
+    ├── notifier.js              Alertes + Telegram
+    └── summary.js               Synthèse hebdomadaire
 ```
 
-Les dossiers `models/`, `routes/`, `controllers/` et `middlewares/` sont vides pour l'instant. Le fichier `.gitkeep` qu'ils contiennent sert seulement à ce que Git les conserve.
+Chemin d'une requête IA : `controller → gateway (anonymisation) → fournisseur 1, 2, 3… → validation → dé-anonymisation → journal AiCall`.
 
----
-
-## 7. Commandes disponibles
-
-À lancer depuis la racine du projet :
+## 6. Commandes
 
 | Commande | Rôle |
 |---|---|
-| `npm run setup` | Installation complète + création de `backend/.env` |
-| `npm run dev` | Lance le backend et le frontend |
-| `npm run dev:back` | Lance uniquement le backend |
-| `npm run dev:front` | Lance uniquement le frontend |
-| `npm run db:check` | Teste la connexion à MongoDB |
-| `npm run lint` | Vérifie la qualité du code du frontend |
+| `npm run setup` | Installation complète + `backend/.env` |
+| `npm run dev` | Backend + frontend |
+| `npm run seed` | Données de démonstration |
+| `npm test` | Tests unitaires du module IA |
+| `npm run db:check` | Test de connexion MongoDB |
+| `npm run lint` | Lint du frontend |
 
----
-
-## 8. Travailler en équipe avec Git
-
-- `main` est la branche stable : on n'y travaille pas directement.
-- Chaque tâche se fait sur sa propre branche : `feature/nom-court` ou `fix/nom-court`.
-
-```bash
-git checkout main
-git pull
-git checkout -b feature/page-connexion
-# ... modifications ...
-git add .
-git commit -m "Ajoute la page de connexion"
-git push -u origin feature/page-connexion
-```
-
-Ouvrez ensuite une **Pull Request** sur GitHub vers `main` pour que l'équipe relise le code.
-
-Avant chaque commit, vérifiez avec `git status` qu'aucun fichier `.env` n'apparaît.
-
----
-
-## 9. Problèmes fréquents
+## 7. Problèmes fréquents
 
 | Symptôme | Solution |
 |---|---|
-| `ECONNREFUSED 127.0.0.1:27017` | MongoDB n'est pas démarré : `net start MongoDB` (terminal administrateur) |
-| `MONGODB_URI est absent de backend/.env` | Relancez `npm run setup` ou copiez `backend/.env.example` en `backend/.env` |
-| `'npm' n'est pas reconnu…` | Node.js n'est pas installé ou le terminal a été ouvert avant l'installation : rouvrez-le |
-| Port déjà utilisé (`EADDRINUSE`) | Un autre programme utilise le port : changez `PORT` dans `backend/.env` |
-| Message « vulnerabilities » après l'installation | Concerne des outils de développement ; n'utilisez pas `npm audit fix --force`, qui peut casser le projet |
+| `ECONNREFUSED 127.0.0.1:27017` | `net start MongoDB` (terminal administrateur) |
+| « Le serveur est injoignable » dans l'interface | Le backend n'est pas démarré (`npm run dev:back`) |
+| Port déjà utilisé (`EADDRINUSE`) | Changez `PORT` dans `backend/.env` (et `NEXT_PUBLIC_API_URL`) |
+| Synthèse « Générateur local » | Normal sans clé API ; ajoutez `GROQ_API_KEY` pour utiliser Llama 3.3 |

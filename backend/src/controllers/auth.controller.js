@@ -1,0 +1,71 @@
+import bcrypt from "bcryptjs";
+import { User } from "../models/index.js";
+import { signToken } from "../middlewares/auth.js";
+import { badRequest, pick, requireFields, unauthorized } from "../utils/httpError.js";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function checkPassword(pwd) {
+  if (typeof pwd !== "string" || pwd.length < 8) {
+    throw badRequest("Le mot de passe doit contenir au moins 8 caractères");
+  }
+}
+
+// Inscription publique : uniquement des comptes aidants
+export async function register(req, res) {
+  requireFields(req.body, ["name", "email", "password"]);
+  const { name, email, password, phone } = req.body;
+  if (!EMAIL_RE.test(email)) throw badRequest("Adresse e-mail invalide");
+  checkPassword(password);
+
+  const user = await User.create({
+    name,
+    email,
+    phone,
+    role: "aidant",
+    passwordHash: await bcrypt.hash(password, 10),
+  });
+  res.status(201).json({ token: signToken(user), user });
+}
+
+export async function login(req, res) {
+  requireFields(req.body, ["email", "password"]);
+  const user = await User.findOne({ email: String(req.body.email).toLowerCase() }).select("+passwordHash");
+  const ok = user && (await bcrypt.compare(req.body.password, user.passwordHash));
+  if (!ok) throw unauthorized("E-mail ou mot de passe incorrect");
+  if (user.status !== "actif") throw unauthorized("Ce compte est désactivé");
+  if (req.body.role && req.body.role !== user.role) {
+    throw unauthorized(user.role === "admin" ? "Ce compte est un compte administrateur" : "Ce compte n'a pas accès à l'administration");
+  }
+
+  user.lastLoginAt = new Date();
+  await user.save();
+  res.json({ token: signToken(user), user });
+}
+
+export async function me(req, res) {
+  res.json({ user: req.user });
+}
+
+export async function updateMe(req, res) {
+  const data = pick(req.body, ["name", "phone"]);
+  if (req.body.notifications) {
+    const n = pick(req.body.notifications, ["email", "telegram", "telegramChatId", "sms"]);
+    for (const [k, v] of Object.entries(n)) req.user.notifications[k] = v;
+  }
+  Object.assign(req.user, data);
+  await req.user.save();
+  res.json({ user: req.user });
+}
+
+export async function changePassword(req, res) {
+  requireFields(req.body, ["currentPassword", "newPassword"]);
+  const user = await User.findById(req.user._id).select("+passwordHash");
+  if (!(await bcrypt.compare(req.body.currentPassword, user.passwordHash))) {
+    throw badRequest("Mot de passe actuel incorrect");
+  }
+  checkPassword(req.body.newPassword);
+  user.passwordHash = await bcrypt.hash(req.body.newPassword, 10);
+  await user.save();
+  res.json({ message: "Mot de passe modifié" });
+}

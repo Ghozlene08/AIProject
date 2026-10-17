@@ -1,26 +1,87 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Charte graphique Senior Assistant (maquettes) */
+@theme {
+  --font-sans: "Nunito Sans Variable", "Segoe UI", system-ui, sans-serif;
+
+  --color-brand-50: #eef5ff;
+  --color-brand-100: #dbe9ff;
+  --color-brand-200: #b9d4ff;
+  --color-brand-300: #8bb7fb;
+  --color-brand-400: #5793f2;
+  --color-brand-500: #2f74e6;
+  --color-brand-600: #1f5fd0;
+  --color-brand-700: #1a4ca8;
+  --color-brand-800: #163e86;
+  --color-brand-900: #0f2a5c;
+
+  --color-ink: #12264d;
+  --color-muted: #5b6b86;
+  --color-line: #e2e9f5;
+  --color-canvas: #f4f8fe;
+
+  --color-ok-50: #e8f8ef;
+  --color-ok-500: #1f9d5c;
+  --color-ok-600: #15814a;
+  --color-warn-50: #fff5e6;
+  --color-warn-500: #f59e0b;
+  --color-warn-600: #b86e00;
+  --color-danger-50: #fdeced;
+  --color-danger-500: #e5484d;
+  --color-danger-600: #c53035;
+  --color-violet-50: #f1edff;
+  --color-violet-500: #7c5cfc;
+
+  --shadow-card: 0 1px 2px rgb(15 42 92 / 0.04), 0 4px 16px rgb(15 42 92 / 0.06);
+  --shadow-pop: 0 12px 40px rgb(15 42 92 / 0.18);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Focus visible et généreux pour la navigation au clavier */
+:focus-visible {
+  outline: 3px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.pulse-ring::before,
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: pulse-ring 2.4s ease-out infinite;
+}
+.pulse-ring::after {
+  animation-delay: 1.2s;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring::before,
+  .pulse-ring::after,
+  .fade-up {
+    animation: none;
+  }
 }
