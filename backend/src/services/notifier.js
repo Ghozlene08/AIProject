@@ -30,6 +30,7 @@ export async function raiseAlert(senior, { type, severity = "moyenne", title, me
   const results = await Promise.all(caregivers.map((u) => sendTelegram(u.notifications.telegramChatId, text)));
   if (results.some(Boolean)) {
     alert.sentTelegram = true;
+    alert.deliveredAt = new Date();
     await alert.save();
   }
   return alert;

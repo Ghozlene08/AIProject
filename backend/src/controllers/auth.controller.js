@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { User } from "../models/index.js";
 import { signToken } from "../middlewares/auth.js";
+import { trackEvent } from "../services/tracking.js";
 import { badRequest, pick, requireFields, unauthorized } from "../utils/httpError.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,6 +41,7 @@ export async function login(req, res) {
 
   user.lastLoginAt = new Date();
   await user.save();
+  if (user.role === "aidant") trackEvent({ user: user._id, actor: "aidant", module: "aidant", action: "connexion" });
   res.json({ token: signToken(user), user });
 }
 

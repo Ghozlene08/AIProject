@@ -59,15 +59,32 @@ Le frontend lit `NEXT_PUBLIC_API_URL` (par défaut `http://localhost:5000/api`, 
 - Synthèse hebdomadaire générée par l'IA
 - Paramètres : compte, notifications (e-mail, Telegram, SMS), mot de passe
 
-**Administration** (`/admin`)
-- Supervision IA : état des fournisseurs, appels du jour, taux de succès, latence, test de la passerelle
-- Journaux des appels IA : filtres, pagination, prompt anonymisé et jetons
-- Fournisseurs IA : activation, priorité de bascule, **panne simulée** (critère d'acceptation n° 8)
-- Utilisateurs : création, rôles, statut, suppression
+**Administration** (`/admin`) — centre de pilotage centré sur l'usage, l'utilité des fonctionnalités et la qualité de service
+- **Tableau de bord** : 4 KPI vedettes (une par famille), détail des 4 familles d'indicateurs, évolution de l'usage, répartition par module, qualité IA, répartition des utilisateurs, **insights & recommandations**, alertes en attente, activités récentes, actions rapides
+- **Analytique & tendances** : comparaison avec la période précédente, adoption de la voix, réussite par fonctionnalité, entonnoir des actions vocales, intentions et causes d'échec, carte thermique jour × heure, récurrence
+- **Utilisateurs** : seniors actifs, nouveaux profils, activation, rétention à 7 jours, comptes inactifs (noms abrégés, aucune donnée médicale, petites villes regroupées)
+- **Services IA** : disponibilité, latence P50/P95 vs objectif de 4 s, bascule et récupération, erreurs et quotas par fournisseur, test de la passerelle
+- **Journaux & rapports** : journaux techniques filtrables, rapport périodique imprimable, exports CSV, toutes les recommandations
+- **Configuration** : comptes et rôles, fournisseurs principaux et de secours (dont **panne simulée**, critère n° 8), seuils d'alerte, confidentialité (conservation des journaux, aperçu des prompts, abréviation des noms)
+
+Les quatre familles d'indicateurs (adoption, utilité, qualité IA, valeur pour les aidants) sont calculées uniquement à partir des données enregistrées : collection `UsageEvent` (une ligne par action, avec son résultat et, pour la voix, l'étape atteinte), `AiCall`, `Alert` (créée → délivrée → traitée), `Intake` et `WeeklySummary`. Chaque KPI affiche sa définition, sa période et sa source. Les recommandations sont rédigées par un **LLM gratuit** à partir de ces seuls indicateurs, calculés par des règles déterministes (`services/insights.js`). La réponse du LLM est validée (JSON, champs autorisés, aucun chiffre absent des données) ; sans LLM disponible, les règles servent de repli. Le résultat est mis en cache une heure pour économiser le quota gratuit.
+
+> **Pour l'équipe de l'interface Senior** : chaque action du senior doit être enregistrée avec `trackEvent()` (`backend/src/services/tracking.js`), par exemple `trackEvent({ senior, actor: "senior", module: "agenda", action: "rappel_cree", channel: "voix", intent: "creer_rappel", step: 4, outcome: "reussi", latencyMs })`. Les données de démonstration de `npm run seed` (42 seniors fictifs, 45 jours d'historique) simulent ces événements en attendant.
 
 **Planificateur** (toutes les minutes) : crée les prises du jour, compte les rappels et passe une prise en « manquée » après 2 rappels sans confirmation (30 min) → alerte + Telegram.
 
-## 4. API REST (préfixe `/api`)
+## 4. Modèles d'IA gratuits utilisés
+
+Vérifiés le 18/10/2026 directement auprès de chaque fournisseur (les modèles prévus au cahier des charges, Llama 3.3 70B et Gemini 2.0 Flash, ne sont plus disponibles gratuitement) :
+
+| Rôle | Fournisseur | Modèle | Temps mesuré |
+|---|---|---|---|
+| LLM principal | Groq | `openai/gpt-oss-120b` | ~0,7 s (phrase courte), ~1,8 s (recommandations) |
+| LLM secours 1 | Google Gemini | `gemini-flash-latest` (réflexion désactivée) | ~3 s |
+| LLM secours 2 | OpenRouter | `google/gemma-4-31b-it:free` | souvent saturé (erreur 429) |
+| Reconnaissance vocale | Groq | `whisper-large-v3-turbo` | — |
+
+## 4 bis. API REST (préfixe `/api`)
 
 | Méthode | Route | Rôle |
 |---|---|---|
@@ -81,7 +98,11 @@ Le frontend lit `NEXT_PUBLIC_API_URL` (par défaut `http://localhost:5000/api`, 
 | GET/PATCH | `/aidant/seniors/:id/intakes`, GET `/adherence` | Prises, observance |
 | GET/PATCH | `/aidant/seniors/:id/alerts`, PATCH `/alerts/read-all` | Alertes |
 | GET/POST | `/aidant/seniors/:id/summaries` | Synthèses hebdomadaires |
-| GET | `/admin/overview`, `/admin/ai-calls` | Supervision, journaux |
+| GET | `/admin/overview`, `/admin/analytics`, `/admin/users-stats`, `/admin/ai-services` | Indicateurs (paramètre `?days=7|30|90`) |
+| GET | `/admin/insights`, `/admin/report` | Recommandations, rapport périodique |
+| GET | `/admin/export?type=kpis|events|ai-calls` | Export CSV (sans donnée nominative) |
+| GET/PUT | `/admin/settings` | Seuils d'alerte et confidentialité |
+| GET | `/admin/ai-calls` | Journaux techniques |
 | GET/PUT | `/admin/providers` | Fournisseurs IA |
 | POST | `/admin/ai/test` | Test de la passerelle |
 | CRUD | `/admin/users` | Utilisateurs |
@@ -99,11 +120,15 @@ frontend/src/
 └── lib/                         Client API, session (JWT), types, formats
 
 backend/src/
-├── models/                      User, Senior, Contact, Medication, Intake, Event, Alert, WeeklySummary, AiProvider, AiCall
+├── models/                      User, Senior, Contact, Medication, Intake, Event, Alert, WeeklySummary, AiProvider, AiCall, UsageEvent, PlatformSettings
 ├── controllers/, routes/        auth, aidant, admin
 ├── middlewares/                 auth (JWT + rôles + accès au senior), erreurs
 └── services/
     ├── ai/                      gateway, anonymizer, validator, providers, defaults
+    ├── analytics.js             Indicateurs (adoption, utilité, qualité IA, aidants)
+    ├── insights.js              Insights & recommandations (règles + LLM gratuit, chiffres vérifiés)
+    ├── tracking.js              Enregistrement des événements d'usage
+    ├── retention.js             Purge des journaux (durée de conservation)
     ├── scheduler.js             Rappels et prises manquées
     ├── notifier.js              Alertes + Telegram
     └── summary.js               Synthèse hebdomadaire
@@ -129,4 +154,5 @@ Chemin d'une requête IA : `controller → gateway (anonymisation) → fournisse
 | `ECONNREFUSED 127.0.0.1:27017` | `net start MongoDB` (terminal administrateur) |
 | « Le serveur est injoignable » dans l'interface | Le backend n'est pas démarré (`npm run dev:back`) |
 | Port déjà utilisé (`EADDRINUSE`) | Changez `PORT` dans `backend/.env` (et `NEXT_PUBLIC_API_URL`) |
-| Synthèse « Générateur local » | Normal sans clé API ; ajoutez `GROQ_API_KEY` pour utiliser Llama 3.3 |
+| Synthèse « Générateur local » | Normal sans clé API ; ajoutez une clé gratuite (`GROQ_API_KEY` sur console.groq.com, `GEMINI_API_KEY` sur aistudio.google.com) |
+| Erreur `HTTP 404 : model … does not exist` dans les journaux | Le modèle a été retiré de l'offre gratuite : changez-le dans Configuration → Fournisseurs IA (les modèles retirés connus sont remplacés au démarrage) |
