@@ -29,6 +29,7 @@ export interface Senior {
   lastSeenAt?: string;
   consentAI?: boolean;
   createdAt: string;
+  photoUrl?: string;
 }
 
 export interface Contact {

@@ -5,7 +5,9 @@ import { addDays, endOfDay, startOfDay } from "../utils/dates.js";
 import { badRequest, notFound, pick, requireFields } from "../utils/httpError.js";
 import { ensureIntakesForMedication, removeFutureIntakes } from "../services/scheduler.js";
 import { generateWeeklySummary, weeklyStats } from "../services/summary.js";
+import { parseSeniorBody, photoUrlFor, removeStoredPhoto, removeUploadedFile } from "../middlewares/seniorPhoto.js";
 
+// photoUrl n'est volontairement PAS dans cette liste : il n'est défini que par l'upload
 const SENIOR_FIELDS = ["firstName", "lastName", "birthDate", "phone", "address", "city", "doctor", "medicalNotes", "consentAI"];
 const CONTACT_FIELDS = ["name", "relation", "phone", "isEmergency", "order"];
 const MED_FIELDS = ["name", "dosage", "posology", "times", "instructions", "active"];
@@ -37,16 +39,24 @@ export async function listSeniors(req, res) {
 }
 
 export async function createSenior(req, res) {
-  requireFields(req.body, ["firstName", "lastName"]);
-  const pin = newPin();
-  const senior = await Senior.create({
-    ...pick(req.body, SENIOR_FIELDS),
-    caregivers: [req.user._id],
-    pairingCode: newPairingCode(),
-    pinHash: await bcrypt.hash(pin, 10),
-  });
-  // Le PIN n'est montré qu'une fois, à l'aidant
-  res.status(201).json({ senior, pin });
+  try {
+    // multipart/form-data : doctor arrive en JSON texte, consentAI en "true"/"false"
+    const body = parseSeniorBody(req.body);
+    requireFields(body, ["firstName", "lastName"]);
+    const pin = newPin();
+    const senior = await Senior.create({
+      ...pick(body, SENIOR_FIELDS),
+      photoUrl: photoUrlFor(req.file), // undefined si aucune photo envoyée
+      caregivers: [req.user._id],
+      pairingCode: newPairingCode(),
+      pinHash: await bcrypt.hash(pin, 10),
+    });
+    // Le PIN n'est montré qu'une fois, à l'aidant
+    res.status(201).json({ senior, pin });
+  } catch (err) {
+    removeUploadedFile(req.file); // pas d'image orpheline si la création échoue
+    throw err;
+  }
 }
 
 export async function getSenior(req, res) {
@@ -55,9 +65,23 @@ export async function getSenior(req, res) {
 }
 
 export async function updateSenior(req, res) {
-  Object.assign(req.senior, pick(req.body, SENIOR_FIELDS));
-  await req.senior.save();
-  res.json({ senior: req.senior });
+  try {
+    const body = parseSeniorBody(req.body);
+    const oldPhoto = req.senior.photoUrl;
+
+    Object.assign(req.senior, pick(body, SENIOR_FIELDS));
+    if (req.file) req.senior.photoUrl = photoUrlFor(req.file); // nouvelle photo
+    else if (body.removePhoto === "true") req.senior.photoUrl = undefined; // photo retirée
+
+    await req.senior.save();
+
+    // L'ancien fichier n'est supprimé qu'une fois la sauvegarde réussie
+    if (oldPhoto && oldPhoto !== req.senior.photoUrl) removeStoredPhoto(oldPhoto);
+    res.json({ senior: req.senior });
+  } catch (err) {
+    removeUploadedFile(req.file);
+    throw err;
+  }
 }
 
 export async function regeneratePairing(req, res) {

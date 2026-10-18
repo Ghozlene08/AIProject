@@ -24,6 +24,8 @@
     "jsonwebtoken": "^9.0.3",
     "mon-app-ia": "file:..",
     "mongoose": "^9.11.2",
-    "senior-assistant": "file:.."
+    "senior-assistant": "file:..",
+    "multer": "^2.4.0"
+
   }
 }
