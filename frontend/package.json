@@ -15,7 +15,8 @@
     "mon-app-ia": "file:..",
     "next": "16.4.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "senior-assistant": "file:.."
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
