@@ -1,6 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { loadSenior, requireAuth, requireRole } from "../middlewares/auth.js";
+import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js"; 
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
@@ -22,12 +23,12 @@ router.put("/auth/password", requireAuth, auth.changePassword);
 const a = Router();
 a.use(requireAuth, requireRole("aidant", "admin"));
 a.get("/seniors", aidant.listSeniors);
-a.post("/seniors", aidant.createSenior);
+a.post("/seniors", uploadSeniorPhoto, aidant.createSenior); // ← CHANGED : lit le multipart + la photo
 
 const s = Router({ mergeParams: true });
 s.use(loadSenior);
 s.get("/", aidant.getSenior);
-s.put("/", aidant.updateSenior);
+s.put("/", uploadSeniorPhoto, aidant.updateSenior); // ← CHANGED : lit le multipart + la photo
 s.post("/pairing", aidant.regeneratePairing);
 s.get("/dashboard", aidant.dashboard);
 

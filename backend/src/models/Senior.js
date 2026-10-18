@@ -15,6 +15,7 @@ const seniorSchema = new mongoose.Schema(
       phone: { type: String, trim: true },
     },
     medicalNotes: { type: String, trim: true },
+    photoUrl: { type: String }, 
     caregivers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     // Appairage de l'interface Senior : code d'appairage + code PIN
     pairingCode: { type: String, unique: true, sparse: true },
