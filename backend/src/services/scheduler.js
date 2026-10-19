@@ -1,6 +1,8 @@
 import { Intake, Medication, Senior } from "../models/index.js";
 import { addDays, atTime, startOfDay, timeFr } from "../utils/dates.js";
 import { raiseAlert } from "./notifier.js";
+import { trackEvent } from "./tracking.js";
+import { purgeOldLogs } from "./retention.js";
 
 const REMINDER_EVERY_MIN = 15; // un rappel au senior toutes les 15 minutes
 const MAX_REMINDERS = 2; // « non confirmé deux fois » → prise manquée
@@ -41,6 +43,7 @@ export async function tick() {
       intake.status = "manque";
       await intake.save();
       const senior = await Senior.findById(intake.senior);
+      trackEvent({ senior: intake.senior, actor: "systeme", module: "agenda", action: "prise_manquee", channel: "auto", outcome: "echec" });
       if (senior) {
         const med = intake.medication;
         await raiseAlert(senior, {
@@ -58,8 +61,11 @@ export async function tick() {
 
 export function startScheduler(intervalMs = 60_000) {
   const run = () => tick().catch((err) => console.error("❌ Planificateur :", err.message));
+  const purge = () => purgeOldLogs().catch((err) => console.error("❌ Purge des journaux :", err.message));
   run();
+  purge();
   const timer = setInterval(run, intervalMs);
+  setInterval(purge, 6 * 3600 * 1000).unref(); // durée de conservation des journaux
   timer.unref();
   console.log("⏰ Planificateur démarré (rappels et prises manquées)");
   return timer;

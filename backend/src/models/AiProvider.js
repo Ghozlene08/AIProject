@@ -12,6 +12,8 @@ const aiProviderSchema = new mongoose.Schema(
     enabled: { type: Boolean, default: true },
     // Démonstration : force l'échec de ce fournisseur (panne simulée)
     simulateFailure: { type: Boolean, default: false },
+    // Quota gratuit configuré (requêtes par jour) ; null = illimité ou exécution locale
+    dailyQuota: { type: Number, default: null },
     envKey: String,
     description: String,
   },

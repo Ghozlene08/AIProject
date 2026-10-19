@@ -5,7 +5,16 @@ import { addDays, endOfDay, startOfDay } from "../utils/dates.js";
 import { badRequest, notFound, pick, requireFields } from "../utils/httpError.js";
 import { ensureIntakesForMedication, removeFutureIntakes } from "../services/scheduler.js";
 import { generateWeeklySummary, weeklyStats } from "../services/summary.js";
+
 import { parseSeniorBody, photoUrlFor, removeStoredPhoto, removeUploadedFile } from "../middlewares/seniorPhoto.js";
+import { trackEvent } from "../services/tracking.js";
+
+const track = (req, module, action) =>
+  trackEvent({ senior: req.senior._id, user: req.user._id, actor: "aidant", module, action });
+
+// Les alertes affichées dans l'espace aidant sont considérées comme délivrées
+const markDelivered = (seniorId) =>
+  Alert.updateMany({ senior: seniorId, deliveredAt: null }, { deliveredAt: new Date() });
 
 // photoUrl n'est volontairement PAS dans cette liste : il n'est défini que par l'upload
 const SENIOR_FIELDS = ["firstName", "lastName", "birthDate", "phone", "address", "city", "doctor", "medicalNotes", "consentAI"];
@@ -105,6 +114,7 @@ export async function dashboard(req, res) {
     Alert.countDocuments({ senior: id, read: false }),
     WeeklySummary.findOne({ senior: id }).sort({ createdAt: -1 }),
   ]);
+  await markDelivered(id);
   const todayEvents = await Event.countDocuments({ senior: id, startAt: range(), status: { $ne: "annule" } });
 
   // Activités à venir : prises et rendez-vous mélangés, par ordre chronologique
@@ -167,6 +177,7 @@ export async function createMedication(req, res) {
   requireFields(req.body, ["name", "times"]);
   const med = await Medication.create({ ...pick(req.body, MED_FIELDS), senior: req.senior._id });
   await ensureIntakesForMedication(med);
+  track(req, "agenda", "traitement_saisi");
   res.status(201).json({ medication: med });
 }
 
@@ -235,6 +246,7 @@ export async function listEvents(req, res) {
 export async function createEvent(req, res) {
   requireFields(req.body, ["title", "startAt"]);
   const event = await Event.create({ ...pick(req.body, EVENT_FIELDS), senior: req.senior._id, createdBy: "aidant" });
+  track(req, "agenda", "evenement_cree");
   res.status(201).json({ event });
 }
 
@@ -257,6 +269,7 @@ export async function listAlerts(req, res) {
   const filter = { senior: req.senior._id };
   if (req.query.type) filter.type = req.query.type;
   if (req.query.unread === "true") filter.read = false;
+  await markDelivered(req.senior._id);
   const alerts = await Alert.find(filter).sort({ createdAt: -1 }).limit(100);
   res.json({ alerts });
 }
@@ -264,12 +277,18 @@ export async function listAlerts(req, res) {
 export async function markAlert(req, res) {
   const alert = await findOwned(Alert, req.params.id, req.senior);
   alert.read = req.body.read ?? true;
+  if (alert.read && !alert.readAt) {
+    alert.readAt = new Date();
+    track(req, "aidant", "alerte_traitee");
+  }
+  if (!alert.read) alert.readAt = undefined;
   await alert.save();
   res.json({ alert });
 }
 
 export async function markAllAlerts(req, res) {
-  await Alert.updateMany({ senior: req.senior._id, read: false }, { read: true });
+  const now = new Date();
+  await Alert.updateMany({ senior: req.senior._id, read: false }, { read: true, readAt: now, deliveredAt: now });
   res.json({ ok: true });
 }
 
@@ -277,10 +296,12 @@ export async function markAllAlerts(req, res) {
 
 export async function listSummaries(req, res) {
   const summaries = await WeeklySummary.find({ senior: req.senior._id }).sort({ createdAt: -1 }).limit(12);
+  if (summaries.length) track(req, "aidant", "synthese_consultee");
   res.json({ summaries });
 }
 
 export async function createSummary(req, res) {
   const summary = await generateWeeklySummary(req.senior);
+  track(req, "aidant", "synthese_generee");
   res.status(201).json({ summary });
 }

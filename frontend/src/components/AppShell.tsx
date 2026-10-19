@@ -44,12 +44,24 @@ export function AppShell({
   spaceLabel,
   home,
   sidebarExtra,
+  sidebarFooter,
+  headerStart,
+  headerEnd,
+  wide,
   children,
 }: {
   nav: NavItem[];
   spaceLabel: string;
   home: string;
   sidebarExtra?: React.ReactNode;
+  /** Remplace l'encart du bas de la barre latérale (false : aucun encart) */
+  sidebarFooter?: React.ReactNode;
+  /** Contenu à gauche de l'en-tête (ex. recherche) */
+  headerStart?: React.ReactNode;
+  /** Contenu avant le menu utilisateur (ex. notifications) */
+  headerEnd?: React.ReactNode;
+  /** Contenu pleine largeur (tableaux de bord denses) */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -85,10 +97,12 @@ export function AppShell({
           </Link>
         );
       })}
-      <div className="mt-auto rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/70 p-4 text-sm">
-        <p className="font-bold text-brand-800">Besoin d&apos;aide ?</p>
-        <p className="mt-1 text-xs leading-relaxed text-brand-700/80">Plus d&apos;autonomie, plus de lien, plus de vie.</p>
-      </div>
+      {sidebarFooter ?? (
+        <div className="mt-auto rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/70 p-4 text-sm">
+          <p className="font-bold text-brand-800">Besoin d&apos;aide ?</p>
+          <p className="mt-1 text-xs leading-relaxed text-brand-700/80">Plus d&apos;autonomie, plus de lien, plus de vie.</p>
+        </div>
+      )}
     </nav>
   );
 
@@ -115,10 +129,13 @@ export function AppShell({
           <button className="rounded-lg p-2 text-muted lg:hidden" onClick={() => setOpen(true)} aria-label="Ouvrir le menu">
             <Menu className="h-6 w-6" />
           </button>
-          <div className="hidden lg:block" />
-          <UserMenu />
+          <div className="min-w-0 flex-1">{headerStart}</div>
+          <div className="flex items-center gap-2">
+            {headerEnd}
+            <UserMenu />
+          </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className={cx("mx-auto w-full flex-1", wide ? "max-w-[1600px]" : "max-w-7xl", " px-4 py-6 sm:px-6 lg:px-8 lg:py-8")}>{children}</main>
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 import bcrypt from "bcryptjs";
 import { User , Senior } from "../models/index.js";
 import { signToken,signSeniorToken } from "../middlewares/auth.js";
+import { trackEvent } from "../services/tracking.js";
 import { badRequest, pick, requireFields, unauthorized } from "../utils/httpError.js";
 import { recognizeSenior } from "../services/compreface.service.js";
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function checkPassword(pwd) {
@@ -40,6 +42,7 @@ export async function login(req, res) {
 
   user.lastLoginAt = new Date();
   await user.save();
+  if (user.role === "aidant") trackEvent({ user: user._id, actor: "aidant", module: "aidant", action: "connexion" });
   res.json({ token: signToken(user), user });
 }
 

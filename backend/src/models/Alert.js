@@ -13,7 +13,10 @@ const alertSchema = new mongoose.Schema(
     title: { type: String, required: true },
     message: String,
     read: { type: Boolean, default: false },
+    // Trois étapes distinctes : enregistrée (createdAt) → délivrée → traitée par l'aidant
     sentTelegram: { type: Boolean, default: false },
+    deliveredAt: Date, // délivrance confirmée (réponse OK de Telegram ou affichage dans l'espace aidant)
+    readAt: Date, // l'aidant a pris connaissance de l'alerte
   },
   { timestamps: true },
 );

@@ -6,6 +6,7 @@ import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
+import * as stats from "../controllers/analytics.controller.js";
 
 const router = Router();
 
@@ -65,7 +66,15 @@ router.use("/aidant", a);
 /* ---------- Administration ---------- */
 const ad = Router();
 ad.use(requireAuth, requireRole("admin"));
-ad.get("/overview", admin.overview);
+ad.get("/overview", stats.overview);
+ad.get("/analytics", stats.trends);
+ad.get("/users-stats", stats.users);
+ad.get("/ai-services", stats.aiServices);
+ad.get("/insights", stats.insightsList);
+ad.get("/report", stats.report);
+ad.get("/export", stats.exportCsv);
+ad.get("/settings", stats.getSettings);
+ad.put("/settings", stats.updateSettings);
 ad.get("/ai-calls", admin.listAiCalls);
 ad.get("/providers", admin.listProviders);
 ad.put("/providers/:id", admin.updateProvider);

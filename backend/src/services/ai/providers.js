@@ -18,13 +18,15 @@ async function postJson(url, body, headers) {
 }
 
 // API compatible OpenAI (Groq, OpenRouter)
-async function openAiCompatible(url, apiKey, model, system, prompt) {
+async function openAiCompatible(url, apiKey, model, system, prompt, maxTokens = 700) {
   const data = await postJson(
     url,
     {
       model,
       temperature: 0.4,
-      max_tokens: 700,
+      max_tokens: maxTokens,
+      // Modèles à raisonnement (gpt-oss) : effort réduit pour tenir l'objectif de latence < 4 s
+      ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -35,39 +37,42 @@ async function openAiCompatible(url, apiKey, model, system, prompt) {
   return data.choices?.[0]?.message?.content;
 }
 
-async function gemini(apiKey, model, system, prompt) {
+async function gemini(apiKey, model, system, prompt, maxTokens = 700) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const data = await postJson(
     url,
     {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+      // Réflexion désactivée : ~3 s au lieu de ~5 s (mesuré), compatible avec l'objectif de latence
+      generationConfig: { temperature: 0.4, maxOutputTokens: maxTokens, thinkingConfig: { thinkingBudget: 0 } },
     },
     { "x-goog-api-key": apiKey },
   );
   return data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("");
 }
 
-// Chaque fournisseur reçoit (provider en base, system, prompt) et renvoie du texte
+// Chaque fournisseur reçoit (provider en base, system, prompt, maxTokens) et renvoie du texte
 export const LLM_CALLERS = {
-  groq: (p, system, prompt) =>
+  groq: (p, system, prompt, maxTokens) =>
     openAiCompatible(
       "https://api.groq.com/openai/v1/chat/completions",
       process.env.GROQ_API_KEY,
-      p.model || "llama-3.3-70b-versatile",
+      p.model || "openai/gpt-oss-120b",
       system,
       prompt,
+      maxTokens,
     ),
-  gemini: (p, system, prompt) =>
-    gemini(process.env.GEMINI_API_KEY, p.model || "gemini-2.0-flash", system, prompt),
-  openrouter: (p, system, prompt) =>
+  gemini: (p, system, prompt, maxTokens) =>
+    gemini(process.env.GEMINI_API_KEY, p.model || "gemini-flash-latest", system, prompt, maxTokens),
+  openrouter: (p, system, prompt, maxTokens) =>
     openAiCompatible(
       "https://openrouter.ai/api/v1/chat/completions",
       process.env.OPENROUTER_API_KEY,
-      p.model || "meta-llama/llama-3.3-70b-instruct:free",
+      p.model || "google/gemma-4-31b-it:free",
       system,
       prompt,
+      maxTokens,
     ),
 };
 
