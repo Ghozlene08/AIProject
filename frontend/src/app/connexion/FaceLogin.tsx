@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { tokenStore } from "@/lib/api";
 import {
   Camera,
   CameraOff,
@@ -13,12 +15,14 @@ type FaceLoginProps = {
 };
 
 export function FaceLogin({ onBack }: FaceLoginProps) {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] = useState("");
+ const [cameraReady, setCameraReady] = useState(false);
+const [cameraError, setCameraError] = useState("");
+const [recognitionError, setRecognitionError] = useState("");
+const [recognizing, setRecognizing] = useState(false);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -57,32 +61,30 @@ export function FaceLogin({ onBack }: FaceLoginProps) {
     };
   }, []);
 
-  function handleRecognition() {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+  async function handleRecognition() {
+  const video = videoRef.current;
+  const canvas = canvasRef.current;
 
-    if (!video || !canvas) {
-      return;
-    }
+  if (!video || !canvas) return;
 
-    // Vérifier que la caméra est prête
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      setCameraError("La caméra n'est pas encore prête.");
-      return;
-    }
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    setRecognitionError("La caméra n'est pas encore prête.");
+    return;
+  }
 
-    // Donner au canvas la taille réelle de la vidéo
+  setRecognizing(true);
+  setRecognitionError("");
+
+  try {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
     const context = canvas.getContext("2d");
 
     if (!context) {
-      setCameraError("Impossible de capturer l'image.");
-      return;
+      throw new Error("Impossible de capturer l'image.");
     }
 
-    // Copier l'image actuelle de la webcam
     context.drawImage(
       video,
       0,
@@ -91,13 +93,59 @@ export function FaceLogin({ onBack }: FaceLoginProps) {
       canvas.height
     );
 
-    // Transformer l'image en JPEG
-    const image = canvas.toDataURL("image/jpeg", 0.9);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("Impossible de créer la photo."));
+          }
+        },
+        "image/jpeg",
+        0.9
+      );
+    });
 
-    setCapturedImage(image);
+    const formData = new FormData();
 
-    console.log("Photo capturée !");
+    // IMPORTANT : le backend attend exactement "photo"
+    formData.append("photo", blob, "face.jpg");
+
+    const response = await fetch(
+      "http://localhost:5000/api/auth/senior/face-login",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || "Impossible de reconnaître votre visage."
+      );
+    }
+
+    tokenStore.set(data.token);
+
+    console.log("Senior reconnu :", data.senior);
+    console.log("Similarité :", data.similarity);
+
+    router.replace("/senior");
+  } catch (error) {
+    console.error("Erreur reconnaissance :", error);
+
+    setRecognitionError(
+      error instanceof Error
+        ? error.message
+        : "Une erreur est survenue pendant la reconnaissance."
+    );
+  } finally {
+    setRecognizing(false);
   }
+}
 
   return (
     <div>
@@ -204,17 +252,22 @@ export function FaceLogin({ onBack }: FaceLoginProps) {
             </p>
           </div>
         )}
-
+{recognitionError && (
+  <div className="mt-4 rounded-xl bg-red-50 p-3 text-center text-sm font-semibold text-red-700">
+    {recognitionError}
+  </div>
+)}
         {/* Bouton capture */}
-        <button
-          type="button"
-          disabled={!cameraReady || !!cameraError}
-          onClick={handleRecognition}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-4 font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ScanFace className="h-5 w-5" />
-          Me reconnaître
-        </button>
+      <button
+  type="button"
+  disabled={!cameraReady || !!cameraError || recognizing}
+  onClick={handleRecognition}
+  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-4 font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  <ScanFace className="h-5 w-5" />
+
+  {recognizing ? "Reconnaissance en cours..." : "Me reconnaître"}
+</button>
 
       </div>
     </div>

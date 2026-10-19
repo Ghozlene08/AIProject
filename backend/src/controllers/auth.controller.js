@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
-import { User } from "../models/index.js";
-import { signToken } from "../middlewares/auth.js";
+import { User , Senior } from "../models/index.js";
+import { signToken,signSeniorToken } from "../middlewares/auth.js";
 import { badRequest, pick, requireFields, unauthorized } from "../utils/httpError.js";
-
+import { recognizeSenior } from "../services/compreface.service.js";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function checkPassword(pwd) {
@@ -68,4 +68,34 @@ export async function changePassword(req, res) {
   user.passwordHash = await bcrypt.hash(req.body.newPassword, 10);
   await user.save();
   res.json({ message: "Mot de passe modifié" });
+}
+export async function seniorFaceLogin(req, res) {
+  // La photo a été placée en mémoire par uploadFaceLogin
+  const match = await recognizeSenior(
+    req.file.buffer,
+    req.file.mimetype
+  );
+
+  if (!match) {
+    throw unauthorized("Visage non reconnu");
+  }
+
+  console.log("Résultat reconnaissance :", match);
+
+  const senior = await Senior.findById(match.subject).catch(() => null);
+
+  if (!senior) {
+    throw unauthorized("Profil senior introuvable");
+  }
+
+  // Pour l'instant, on ne bloque PAS encore selon similarity.
+  // On va d'abord faire plusieurs tests avant de fixer le seuil.
+
+  const token = signSeniorToken(senior);
+
+  res.json({
+    token,
+    senior,
+    similarity: match.similarity,
+  });
 }

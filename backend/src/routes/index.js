@@ -2,6 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { loadSenior, requireAuth, requireRole } from "../middlewares/auth.js";
 import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js"; 
+import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
@@ -15,6 +16,7 @@ router.get("/health", (_req, res) => {
 /* ---------- Authentification ---------- */
 router.post("/auth/register", auth.register);
 router.post("/auth/login", auth.login);
+router.post("/auth/senior/face-login",uploadFaceLogin,auth.seniorFaceLogin);
 router.get("/auth/me", requireAuth, auth.me);
 router.put("/auth/me", requireAuth, auth.updateMe);
 router.put("/auth/password", requireAuth, auth.changePassword);
