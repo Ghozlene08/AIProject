@@ -5,6 +5,7 @@ import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
 import * as stats from "../controllers/analytics.controller.js";
+import { aidantMemoryRouter } from "./souvenirs/souvenirs.routes.js";
 
 const router = Router();
 
@@ -56,6 +57,9 @@ s.patch("/alerts/:id", aidant.markAlert);
 
 s.get("/summaries", aidant.listSummaries);
 s.post("/summaries", aidant.createSummary);
+
+// Module F4 — Souvenirs
+s.use("/souvenirs", aidantMemoryRouter);
 
 a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);

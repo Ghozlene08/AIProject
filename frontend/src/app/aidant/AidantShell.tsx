@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Bell,
+  BookHeart,
   CalendarDays,
   ClipboardCheck,
   FileText,
@@ -37,6 +38,7 @@ function Inner({ children }: { children: React.ReactNode }) {
     { href: "/aidant/traitements", label: "Traitements", icon: Pill },
     { href: "/aidant/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/aidant/suivi", label: "Suivi des prises", icon: ClipboardCheck },
+    { href: "/aidant/souvenirs", label: "Souvenirs", icon: BookHeart }, // Module F4
     { href: "/aidant/alertes", label: "Alertes", icon: Bell, badge: unread },
     { href: "/aidant/synthese", label: "Synthèse hebdo", icon: FileText },
     { href: "/aidant/parametres", label: "Paramètres", icon: Settings },

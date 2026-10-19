@@ -24,6 +24,7 @@ import {
 import { ensureProviders } from "../src/services/ai/defaults.js";
 import { generateWeeklySummary } from "../src/services/summary.js";
 import { addDays, atTime, startOfDay } from "../src/utils/dates.js";
+import { seedMemories } from "./souvenirs/seed.js";
 
 if (!(await connectDB(process.env.MONGODB_URI))) process.exit(1);
 
@@ -337,6 +338,9 @@ await UsageEvent.collection.insertMany(events);
 await AiCall.collection.insertMany(calls);
 await Alert.collection.insertMany([...alerts, rdvAlert, symptom]);
 await WeeklySummary.collection.insertMany(summaries);
+
+// Module Souvenirs : souvenirs, écoutes et quiz de démonstration pour Marie
+await seedMemories({ senior: marie, caregiver: sophie });
 
 // Synthèse de Marie via la vraie passerelle IA (anonymisation + secours)
 await generateWeeklySummary(marie);

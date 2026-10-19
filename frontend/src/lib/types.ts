@@ -74,7 +74,7 @@ export interface AgendaEvent {
   status: "prevu" | "fait" | "annule";
 }
 
-export type AlertType = "prise_manquee" | "sos" | "rdv" | "symptome" | "synthese" | "info";
+export type AlertType = "prise_manquee" | "sos" | "rdv" | "symptome" | "synthese" | "souvenir_enregistre" | "info";
 
 export interface Alert {
   _id: string;
