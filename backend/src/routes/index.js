@@ -7,6 +7,8 @@ import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
 import * as stats from "../controllers/analytics.controller.js";
+import { uploadDocument } from "../middlewares/documentUpload.js";
+import * as document from "../controllers/document.controller.js";
 
 const router = Router();
 
@@ -63,6 +65,9 @@ s.post("/summaries", aidant.createSummary);
 a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);
 
+/* ---------- Documents senior ---------- */
+router.post( "/documents/ocr", uploadDocument,document.extractDocumentText);
+router.post("/documents/explain",uploadDocument,document.explainDocument);
 /* ---------- Administration ---------- */
 const ad = Router();
 ad.use(requireAuth, requireRole("admin"));

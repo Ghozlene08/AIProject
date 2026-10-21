@@ -101,6 +101,20 @@ async function retakePhoto() {
     setError("Impossible de redémarrer la caméra.");
   }
 }
+function usePhoto() {
+  if (!photo) {
+    setError("Aucune photo sélectionnée.");
+    return;
+  }
+
+  try {
+    sessionStorage.setItem("seniorDocumentPhoto", photo);
+    router.push("/senior/documents/selection");
+  } catch (err) {
+    console.error(err);
+    setError("Impossible d'enregistrer la photo.");
+  }
+}
   return (
     <main className="min-h-screen bg-canvas px-4 py-6">
       <div className="mx-auto w-full max-w-2xl">
@@ -223,6 +237,7 @@ async function retakePhoto() {
 
     <button
       type="button"
+        onClick={usePhoto}
       className="flex min-h-16 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-600 px-4 text-lg font-extrabold text-white shadow-sm hover:bg-brand-700"
     >
       Utiliser cette photo
