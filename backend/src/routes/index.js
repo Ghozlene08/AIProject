@@ -1,4 +1,5 @@
 import { Router } from "express";
+import assistantRouter from "./assistant.js";
 import mongoose from "mongoose";
 import { loadSenior, requireAuth, requireRole } from "../middlewares/auth.js";
 import * as auth from "../controllers/auth.controller.js";
@@ -8,6 +9,7 @@ import * as stats from "../controllers/analytics.controller.js";
 import { aidantMemoryRouter } from "./souvenirs/souvenirs.routes.js";
 
 const router = Router();
+router.use("/senior", assistantRouter);
 
 router.get("/health", (_req, res) => {
   res.json({ status: "ok", database: mongoose.connection.readyState === 1 ? "connectée" : "déconnectée" });

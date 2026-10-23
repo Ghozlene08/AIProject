@@ -7,7 +7,7 @@ import { errorHandler, notFoundHandler } from "./middlewares/error.js";
 const app = express();
 
 // Autorise le frontend (Next.js) à appeler ce serveur
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:3000" }));
+app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:3000", credentials: true }));
 
 // Permet de lire le JSON envoyé dans les requêtes
 app.use(express.json({ limit: "1mb" }));
