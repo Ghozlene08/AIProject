@@ -7,6 +7,7 @@ const allowedTypes = [
   "image/jpeg",
   "image/png",
   "image/webp",
+   "application/pdf",
 ];
 
 const upload = multer({
@@ -20,8 +21,8 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     if (!allowedTypes.includes(file.mimetype)) {
       return cb(
-        badRequest("Format de document non pris en charge (JPG, PNG ou WebP).")
-      );
+badRequest("Format de document non pris en charge (PDF, JPG, PNG ou WebP)."
+)      );
     }
 
     cb(null, true);

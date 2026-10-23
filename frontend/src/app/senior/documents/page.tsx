@@ -2,10 +2,47 @@
 
 import { Camera, ChevronLeft, ChevronRight, FolderOpen, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
-
+import { useRef } from "react";
 export default function DocumentsPage() {
   const router = useRouter();
+const fileInputRef = useRef<HTMLInputElement>(null);
 
+function handleChooseDocument() {
+  fileInputRef.current?.click();
+}
+
+function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  const acceptedTypes = [
+    "image/jpeg",
+    "image/png",
+    "application/pdf",
+  ];
+
+  if (!acceptedTypes.includes(file.type)) {
+    alert("Veuillez choisir un fichier PDF, JPG ou PNG.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    const result = reader.result;
+
+    if (typeof result !== "string") return;
+
+    sessionStorage.setItem("seniorDocumentPhoto", result);
+    sessionStorage.setItem("seniorDocumentName", file.name);
+    sessionStorage.setItem("seniorDocumentType", file.type);
+
+    router.push("/senior/documents/selection");
+  };
+
+  reader.readAsDataURL(file);
+}
   return (
     <main className="min-h-screen bg-canvas px-4 py-6">
       <div className="mx-auto w-full max-w-2xl">
@@ -57,10 +94,17 @@ export default function DocumentsPage() {
 
           <ChevronRight className="h-7 w-7 text-brand-900" />
         </button>
-
+<input
+  ref={fileInputRef}
+  type="file"
+  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+  onChange={handleFileChange}
+  className="hidden"
+/>
         {/* Choisir un document */}
         <button
           type="button"
+          onClick={handleChooseDocument}
           className="mt-4 flex w-full items-center gap-5 rounded-3xl border border-amber-100 bg-amber-50 p-6 text-left shadow-sm transition hover:shadow-md"
         >
           <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-400 text-white">

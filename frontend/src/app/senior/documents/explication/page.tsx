@@ -33,6 +33,14 @@ const [isSpeaking, setIsSpeaking] = useState(false);
     setExplanation(savedExplanation);
     setProvider(savedProvider || "");
   }, [router]);
+  function detectLanguage(text: string): "fr-FR" | "ar-SA" {
+  const arabicCharacters = text.match(/[\u0600-\u06FF]/g) || [];
+  const latinCharacters = text.match(/[A-Za-zÀ-ÿ]/g) || [];
+
+  return arabicCharacters.length > latinCharacters.length
+    ? "ar-SA"
+    : "fr-FR";
+}
 function speakExplanation() {
   if (!explanation) return;
 
@@ -40,7 +48,10 @@ function speakExplanation() {
 
   const utterance = new SpeechSynthesisUtterance(explanation);
 
-  utterance.lang = "fr-FR";
+ const language = detectLanguage(explanation);
+utterance.lang = language;
+
+console.log("🔊 Langue détectée pour la lecture :", language);
   utterance.rate = 0.9;
   utterance.pitch = 1;
   utterance.volume = 1;

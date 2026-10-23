@@ -19,9 +19,11 @@ export default function CameraDocumentPage() {
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-          },
+         video: {
+  facingMode: { ideal: "environment" },
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+},
           audio: false,
         });
 
@@ -55,8 +57,90 @@ function takePhoto() {
     return;
   }
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  const videoWidth = video.videoWidth;
+  const videoHeight = video.videoHeight;
+
+  console.log(
+    "📷 Résolution caméra :",
+    videoWidth,
+    "x",
+    videoHeight
+  );
+
+  /*
+   * Zone visible dans l'interface :
+   *
+   * conteneur : hauteur 600 px
+   * cadre :
+   *   left/right = 64 px
+   *   top/bottom = 48 px
+   */
+
+  const container = video.parentElement;
+
+  if (!container) {
+    setError("Impossible de déterminer la zone du document.");
+    return;
+  }
+
+  const containerWidth = container.clientWidth;
+  const containerHeight = container.clientHeight;
+
+  // Dimensions du cadre dans l'interface
+  const frameLeft = 64;
+  const frameRight = 64;
+  const frameTop = 48;
+  const frameBottom = 48;
+
+  const frameWidth =
+    containerWidth - frameLeft - frameRight;
+
+  const frameHeight =
+    containerHeight - frameTop - frameBottom;
+
+  /*
+   * Le <video> utilise object-cover.
+   * Il faut donc calculer quelle partie de la vraie image
+   * correspond exactement à ce qui est affiché.
+   */
+
+  const scale = Math.max(
+    containerWidth / videoWidth,
+    containerHeight / videoHeight
+  );
+
+  const displayedWidth = videoWidth * scale;
+  const displayedHeight = videoHeight * scale;
+
+  const hiddenX =
+    (displayedWidth - containerWidth) / 2;
+
+  const hiddenY =
+    (displayedHeight - containerHeight) / 2;
+
+  // Conversion du cadre écran vers la résolution caméra
+  const sourceX =
+    (frameLeft + hiddenX) / scale;
+
+  const sourceY =
+    (frameTop + hiddenY) / scale;
+
+  const sourceWidth =
+    frameWidth / scale;
+
+  const sourceHeight =
+    frameHeight / scale;
+
+  console.log(
+    "✂️ Zone document :",
+    Math.round(sourceWidth),
+    "x",
+    Math.round(sourceHeight)
+  );
+
+  // Le canvas contient uniquement le document cadré
+  canvas.width = Math.round(sourceWidth);
+  canvas.height = Math.round(sourceHeight);
 
   const context = canvas.getContext("2d");
 
@@ -64,17 +148,37 @@ function takePhoto() {
 
   context.drawImage(
     video,
+
+    // partie à prendre dans la caméra
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+
+    // destination dans le canvas
     0,
     0,
     canvas.width,
     canvas.height
   );
 
-  const image = canvas.toDataURL("image/jpeg", 0.9);
+  const image = canvas.toDataURL(
+    "image/jpeg",
+    0.95
+  );
+
+  console.log(
+    "📸 Résolution document enregistré :",
+    canvas.width,
+    "x",
+    canvas.height
+  );
 
   setPhoto(image);
 
-  streamRef.current?.getTracks().forEach((track) => track.stop());
+  streamRef.current
+    ?.getTracks()
+    .forEach((track) => track.stop());
 }
 
 async function retakePhoto() {
@@ -83,9 +187,11 @@ async function retakePhoto() {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: "environment" },
-      },
+     video: {
+  facingMode: { ideal: "environment" },
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+},
       audio: false,
     });
 
@@ -138,15 +244,15 @@ function usePhoto() {
         {/* Caméra */}
         <div className="relative mt-6 overflow-hidden rounded-3xl bg-black shadow-lg">
 
-          <div className="relative aspect-[3/4] bg-black">
+          <div className="relative h-[600px] bg-black">
 
            {photo ? (
   // eslint-disable-next-line @next/next/no-img-element
-  <img
-    src={photo}
-    alt="Document photographié"
-    className="h-full w-full object-cover"
-  />
+ <img
+  src={photo}
+  alt="Document photographié"
+  className="h-full w-full object-contain bg-black"
+/>
 ) : (
   <video
     ref={videoRef}
@@ -163,8 +269,7 @@ function usePhoto() {
             </div>
 
             {/* Cadre document */}
-            <div className="pointer-events-none absolute inset-10 border-2 border-white/80">
-
+<div className="pointer-events-none absolute left-16 right-16 top-12 bottom-12 border-2 border-white/80 rounded-xl">
               {/* Coin haut gauche */}
               <span className="absolute -left-1 -top-1 h-10 w-10 rounded-tl-xl border-l-4 border-t-4 border-white" />
 

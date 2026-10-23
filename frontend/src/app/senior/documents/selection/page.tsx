@@ -13,19 +13,23 @@ export default function DocumentSelectionPage() {
   const router = useRouter();
 
   const [photo, setPhoto] = useState<string | null>(null);
+  const [documentName, setDocumentName] = useState("document.jpg");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-const [error, setError] = useState("");
+  const [error, setError] = useState("");
+  const isPdf = documentName.toLowerCase().endsWith(".pdf");
 
   useEffect(() => {
-    const savedPhoto = sessionStorage.getItem("seniorDocumentPhoto");
+  const savedPhoto = sessionStorage.getItem("seniorDocumentPhoto");
+  const savedName = sessionStorage.getItem("seniorDocumentName");
 
-    if (!savedPhoto) {
-      router.replace("/senior/documents");
-      return;
-    }
+  if (!savedPhoto) {
+    router.replace("/senior/documents");
+    return;
+  }
 
-    setPhoto(savedPhoto);
-  }, [router]);
+  setPhoto(savedPhoto);
+  setDocumentName(savedName || "document.jpg");
+}, [router]);
 async function explainDocument() {
   if (!photo) return;
 
@@ -37,11 +41,11 @@ async function explainDocument() {
     const imageResponse = await fetch(photo);
     const blob = await imageResponse.blob();
 
-    const file = new File(
-      [blob],
-      "document.jpg",
-      { type: "image/jpeg" }
-    );
+  const file = new File(
+  [blob],
+  documentName,
+  { type: blob.type || "image/jpeg" }
+);
 
     // Préparer le multipart/form-data
     const formData = new FormData();
@@ -128,14 +132,32 @@ async function explainDocument() {
 
         {/* Aperçu du document */}
         <div className="mt-7 overflow-hidden rounded-3xl bg-white p-4 shadow-sm">
-          <div className="overflow-hidden rounded-2xl bg-gray-100">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo}
-              alt="Document sélectionné"
-              className="max-h-[520px] w-full object-contain"
-            />
-          </div>
+         <div className="overflow-hidden rounded-2xl bg-gray-100">
+  {isPdf ? (
+    <div className="flex min-h-[350px] flex-col items-center justify-center gap-4 p-8">
+      <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-red-50">
+        <FileText className="h-14 w-14 text-red-600" />
+      </div>
+
+      <p className="text-xl font-extrabold text-brand-900">
+        Document PDF
+      </p>
+
+      <p className="max-w-md text-center text-base text-muted">
+        {documentName}
+      </p>
+    </div>
+  ) : (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo}
+        alt="Document sélectionné"
+        className="max-h-[520px] w-full object-contain"
+      />
+    </>
+  )}
+</div>
 
           {/* Nom du document */}
           <div className="mt-4 flex items-center gap-3">
@@ -144,20 +166,22 @@ async function explainDocument() {
             </div>
 
             <div>
-              <p className="font-extrabold text-brand-900">
-                document.jpg
-              </p>
+             <p className="font-extrabold text-brand-900">
+  {documentName}
+</p>
 
               <p className="text-sm text-muted">
-                Photo prête à être analysée
-              </p>
+  {isPdf
+    ? "PDF prêt à être analysé"
+    : "Photo prête à être analysée"}
+</p>
             </div>
           </div>
         </div>
         {/* Changer le document */}
         <button
           type="button"
-          onClick={() => router.push("/senior/documents/camera")}
+         onClick={() => router.push("/senior/documents")}
           className="mt-5 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl border-2 border-brand-200 bg-white px-5 text-lg font-extrabold text-brand-700"
         >
           <RotateCcw className="h-6 w-6" />
@@ -175,7 +199,6 @@ async function explainDocument() {
            {isAnalyzing
              ? "Analyse du document..."
              : "Expliquer ce document"}
-          Expliquer ce document
         </button>
 {error && (
   <div className="mt-4 rounded-2xl bg-red-50 p-4 text-center font-semibold text-red-600">
