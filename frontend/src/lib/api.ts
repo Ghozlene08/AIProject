@@ -59,6 +59,7 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body ?? {}),
   del: (path: string) => request<void>("DELETE", path),
+  
 };
 
 export const qs = (params: Record<string, string | number | boolean | undefined | null>) => {

@@ -27,6 +27,9 @@
     "mon-app-ia": "file:..",
     "mongoose": "^9.11.2",
     "multer": "^2.4.0",
-    "senior-assistant": "file:.."
+    "senior-assistant": "file:..",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
+    "twilio": "^6.2.0"
   }
 }

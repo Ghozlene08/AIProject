@@ -1,10 +1,14 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { loadSenior, requireAuth, requireRole } from "../middlewares/auth.js";
-import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js"; 
+import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
+import * as sos from "../controllers/sos.controller.js";
+import * as riskAnalyzer from "../controllers/riskAnalyzer.controller.js";
+import { analyzeSeniorRisk } from "../services/riskAnalyzer.service.js";
+import * as checkInController from "../controllers/checkIn.controller.js";
 
 const router = Router();
 
@@ -23,14 +27,22 @@ router.put("/auth/password", requireAuth, auth.changePassword);
 const a = Router();
 a.use(requireAuth, requireRole("aidant", "admin"));
 a.get("/seniors", aidant.listSeniors);
-a.post("/seniors", uploadSeniorPhoto, aidant.createSenior); // ← CHANGED : lit le multipart + la photo
+a.post("/seniors", uploadSeniorPhoto, aidant.createSenior);
+
+// SOS d'un aidant (tous seniors confondus)
+a.get("/sos", aidant.listMySos); // aidant déduit du token
+a.get("/sos/active", aidant.listActiveSos); // non traités, format événement socket
+a.get("/caregivers/:caregiverId/sos", aidant.listCaregiverSos); // historique par id d'aidant
 
 const s = Router({ mergeParams: true });
 s.use(loadSenior);
 s.get("/", aidant.getSenior);
-s.put("/", uploadSeniorPhoto, aidant.updateSenior); // ← CHANGED : lit le multipart + la photo
+s.put("/", uploadSeniorPhoto, aidant.updateSenior);
 s.post("/pairing", aidant.regeneratePairing);
 s.get("/dashboard", aidant.dashboard);
+
+s.post("/sos", sos.triggerSOS);
+s.get("/sos", aidant.listSos); // urgences d'un senior (SOS + check-in manqué)
 
 s.post("/contacts", aidant.createContact);
 s.put("/contacts/:id", aidant.updateContact);
@@ -50,12 +62,17 @@ s.post("/events", aidant.createEvent);
 s.put("/events/:id", aidant.updateEvent);
 s.delete("/events/:id", aidant.deleteEvent);
 
+// L'ordre compte : read-all AVANT :id
 s.get("/alerts", aidant.listAlerts);
 s.patch("/alerts/read-all", aidant.markAllAlerts);
 s.patch("/alerts/:id", aidant.markAlert);
+s.delete("/alerts", aidant.deleteAlerts); // nettoyage en masse (?type=sos)
+s.delete("/alerts/:id", aidant.deleteAlert); // suppression d'une alerte
 
 s.get("/summaries", aidant.listSummaries);
 s.post("/summaries", aidant.createSummary);
+
+s.get("/risk-analysis", riskAnalyzer.analyzeRisk);
 
 a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);
@@ -73,5 +90,52 @@ ad.post("/users", admin.createUser);
 ad.put("/users/:id", admin.updateUser);
 ad.delete("/users/:id", admin.deleteUser);
 router.use("/admin", ad);
+
+/* ---------- TEMPORARY: development testing only ---------- */
+if (process.env.NODE_ENV !== "production") {
+  // Simulate a senior answering a check-in
+  router.post("/test/check-ins/:checkInId/respond", checkInController.respondToCheckIn);
+
+  // Trigger an SOS for a senior
+  router.post("/test/seniors/:seniorId/sos", async (req, res, next) => {
+    try {
+      req.senior = await mongoose.model("Senior").findById(req.params.seniorId);
+
+      if (!req.senior) {
+        return res.status(404).json({ message: "Senior introuvable." });
+      }
+
+      return sos.triggerSOS(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Run the risk analysis for a senior
+  router.get("/test/seniors/:seniorId/risk-analysis", async (req, res, next) => {
+    try {
+      const { seniorId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(seniorId)) {
+        return res.status(400).json({ message: "Identifiant du senior invalide." });
+      }
+
+      const senior = await mongoose.model("Senior").findById(seniorId);
+
+      if (!senior) {
+        return res.status(404).json({ message: "Senior introuvable." });
+      }
+
+      const result = await analyzeSeniorRisk(senior._id);
+
+      return res.status(200).json({
+        seniorId: senior._id,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+}
 
 export default router;

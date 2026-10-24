@@ -75,7 +75,7 @@ export interface AgendaEvent {
   status: "prevu" | "fait" | "annule";
 }
 
-export type AlertType = "prise_manquee" | "sos" | "rdv" | "symptome" | "synthese" | "info";
+export type AlertType = "prise_manquee" | "sos" | "checkin_manque" | "rdv" | "symptome" | "synthese" | "info"; // ← checkin_manque
 
 export interface Alert {
   _id: string;
@@ -115,6 +115,7 @@ export interface Dashboard {
   nextEvent: AgendaEvent | null;
   upcoming: { kind: string; at: string; title: string; detail?: string }[];
   alerts: Alert[];
+  activeSos?: Alert[]; // ← urgences non traitées (SOS + check-in manqué)
   unreadAlerts: number;
   lastSummary: WeeklySummary | null;
 }
