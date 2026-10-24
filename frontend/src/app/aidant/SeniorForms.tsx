@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { HeartHandshake, KeyRound, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Senior } from "@/lib/types";
@@ -85,6 +86,8 @@ export function PairingResult({ code, pin }: { code?: string; pin: string }) {
         </div>
       </div>
       <p className="mt-3 text-xs text-muted">Le PIN ne sera plus affiché : notez-le maintenant.</p>
+      <Link href="/senior/connexion" className="mt-5 flex min-h-16 items-center justify-center gap-3 rounded-2xl bg-brand-700 px-5 text-[22px] font-bold text-white hover:bg-brand-800"><KeyRound className="h-6 w-6" aria-hidden="true" />Connecter le senior</Link>
+      <p className="mt-3 text-base text-ink">Sur l’appareil du senior, ouvrez l’Espace Senior et saisissez ces deux codes.</p>
     </div>
   );
 }

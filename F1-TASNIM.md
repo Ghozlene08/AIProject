@@ -104,3 +104,9 @@ L’accueil garde uniquement le micro pour F1. Le lien Messages du menu latéral
 Le cookie de session est HttpOnly et SameSite Lax, avec Secure en production. Les mutations refusent les origines étrangères. Seule la préférence de mémorisation est conservée dans le localStorage, par identifiant Senior ; aucun PIN, jeton ou message personnel ne l’est.
 
 Nouvelles routes : GET `/api/senior/session`, POST `/api/senior/logout` et GET `/api/senior/conversation`. La session expire après 30 jours, un changement de code ou une suppression des cookies. Une déconnexion explicite efface le cookie sur l’appareil.
+
+## Passage Aidant vers connexion Senior
+
+Après création ou renouvellement des codes, la carte affichant le code et le PIN propose « Connecter le senior ». Ce lien ouvre `/senior/connexion`. L’entrée `/senior` affiche également ce formulaire. Le senior saisit ses deux codes, puis est redirigé vers `/senior/connexion-reussie` seulement après validation par l’API. Le PIN ne passe jamais dans une URL. Une ancienne session peut être conservée ou remplacée en saisissant les nouveaux codes.
+
+L’ancienne animation « Visage reconnu » a été retirée de cet accueil, car elle ne correspondait pas à une vérification réelle. Le parcours formulaire → API → accueil a été vérifié avec le profil de démonstration, avec 48 tests backend, TypeScript et ESLint réussis. Le parcours complet avec création d’un nouvel aidant n’a pas été rejoué dans la base utilisateur pendant cette correction.

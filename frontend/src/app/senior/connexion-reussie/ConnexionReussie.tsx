@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -42,69 +42,9 @@ const DEMO: SeniorAccueilData = {
   prochainePrise: { medicament: "Paracétamol 1 g", heure: "08:30" },
 };
 
-const REDIRECT_MS = 3000;
-
-/**
- * Étape 4 du parcours de connexion du senior :
- * 1) carte « Visage reconnu avec succès » avec barre de progression,
- * 2) puis l'accueil du senior (assistant vocal + raccourcis).
- */
-export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS, initialView = "Accueil" }: { data?: SeniorAccueilData; redirectMs?: number; initialView?: "Accueil" | "Messages" }) {
+export function ConnexionReussie({ data = DEMO, initialView = "Accueil" }: { data?: SeniorAccueilData; redirectMs?: number; initialView?: "Accueil" | "Messages" }) {
   const voice = useVoiceAssistant();
-  const [phase, setPhase] = useState<"succes" | "accueil">("succes");
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    const start = window.setTimeout(() => setProgress(100), 50);
-    const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
-    return () => {
-      window.clearTimeout(start);
-      window.clearTimeout(done);
-    };
-  }, [redirectMs]);
-
-  return phase === "succes" && !voice.connected && initialView === "Accueil" ? <SuccesCard data={data} progress={progress} durationMs={redirectMs} /> : <SeniorAccueil data={data} voice={voice} view={initialView} />;
-}
-
-/* ---------- 1. Carte de succès ---------- */
-
-function SuccesCard({ data, progress, durationMs }: { data: SeniorAccueilData; progress: number; durationMs: number }) {
-  return (
-    <main className="flex min-h-screen flex-1 items-center justify-center bg-gradient-to-b from-brand-50 to-canvas px-4 py-10">
-      <section aria-live="polite" className="fade-up w-full max-w-md rounded-[28px] border border-line bg-white px-8 py-10 text-center shadow-pop">
-        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-ok-500 text-white shadow-lg shadow-ok-500/30">
-          <Check className="h-11 w-11" strokeWidth={3} aria-hidden="true" />
-        </span>
-
-        <h1 className="mt-6 text-[34px] font-black tracking-tight text-brand-900">Bonjour {data.firstName} !</h1>
-        <p className="mt-1 text-[22px] font-semibold text-ok-600">Visage reconnu avec succès.</p>
-
-        <div className="mx-auto mt-7 w-fit rounded-full bg-brand-50 p-2.5">
-          <Portrait data={data} className="h-36 w-36" />
-        </div>
-
-        <p className="mt-7 text-[22px] leading-snug text-ink">
-          Ouverture de votre espace…
-          <br />
-          Redirection en cours…
-        </p>
-
-        <div
-          className="mt-5 h-3 w-full overflow-hidden rounded-full bg-brand-100"
-          role="progressbar"
-          aria-label="Ouverture de votre espace"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-        >
-          <div
-            className="h-full rounded-full bg-brand-600 ease-linear motion-safe:transition-[width]"
-            style={{ width: `${progress}%`, transitionDuration: `${durationMs - 100}ms` }}
-          />
-        </div>
-      </section>
-    </main>
-  );
+  return <SeniorAccueil data={data} voice={voice} view={initialView} />;
 }
 
 function Portrait({ data, className }: { data: SeniorAccueilData; className?: string }) {

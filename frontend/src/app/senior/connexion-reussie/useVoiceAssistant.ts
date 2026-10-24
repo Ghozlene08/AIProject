@@ -219,10 +219,13 @@ export function useVoiceAssistant() {
       setConnected(true); setProfile(data.firstName); setLastName(data.lastName || ""); seniorId.current = data.seniorId;
       setReply(""); setTranscript(""); setMessages([]); setLoginOpen(false); capabilities.current = null;
       try { setRemember(localStorage.getItem(`sa_remember_${data.seniorId}`) === "true"); } catch {}
-      const history = await request("/conversation", undefined, "GET");
-      setMessages((await history.json()).turns);
+      try {
+        const history = await request("/conversation", undefined, "GET");
+        setMessages((await history.json()).turns);
+      } catch { /* L'historique pourra être rechargé après la connexion. */ }
+      return true;
     }
-    catch (e) { setError(e instanceof Error ? e.message : "Connexion impossible."); }
+    catch (e) { setError(e instanceof Error ? e.message : "Connexion impossible."); return false; }
     finally { setBusy(false); }
   }
   async function disconnect() {
