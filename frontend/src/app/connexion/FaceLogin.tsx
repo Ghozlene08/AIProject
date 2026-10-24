@@ -129,7 +129,8 @@ const [recognizing, setRecognizing] = useState(false);
     }
 
     tokenStore.set(data.token);
-
+// Stocker l'id du senior connecté
+localStorage.setItem("seniorId", data.senior._id);
     console.log("Senior reconnu :", data.senior);
     console.log("Similarité :", data.similarity);
 
