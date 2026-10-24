@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import {
   Bell,
   CalendarDays,
@@ -10,10 +11,8 @@ import {
   FileText,
   Heart,
   Home,
-  LayoutGrid,
   LogOut,
   MessageSquare,
-  Mic,
   Pill,
   Settings,
   UserRound,
@@ -22,6 +21,10 @@ import {
 } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { cx } from "@/components/ui";
+import { VoiceAssistant } from "./VoiceAssistant";
+import { MessagesPanel } from "./MessagesPanel";
+import { SeniorConnectionDialog } from "./SeniorConnectionDialog";
+import { useVoiceAssistant, type VoiceController } from "./useVoiceAssistant";
 
 /* ---------- Données fictives (à remplacer par l'API lors du branchement) ---------- */
 
@@ -39,68 +42,9 @@ const DEMO: SeniorAccueilData = {
   prochainePrise: { medicament: "Paracétamol 1 g", heure: "08:30" },
 };
 
-const REDIRECT_MS = 3000;
-
-/**
- * Étape 4 du parcours de connexion du senior :
- * 1) carte « Visage reconnu avec succès » avec barre de progression,
- * 2) puis l'accueil du senior (assistant vocal + raccourcis).
- */
-export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { data?: SeniorAccueilData; redirectMs?: number }) {
-  const [phase, setPhase] = useState<"succes" | "accueil">("succes");
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    const start = window.setTimeout(() => setProgress(100), 50);
-    const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
-    return () => {
-      window.clearTimeout(start);
-      window.clearTimeout(done);
-    };
-  }, [redirectMs]);
-
-  return phase === "succes" ? <SuccesCard data={data} progress={progress} durationMs={redirectMs} /> : <SeniorAccueil data={data} />;
-}
-
-/* ---------- 1. Carte de succès ---------- */
-
-function SuccesCard({ data, progress, durationMs }: { data: SeniorAccueilData; progress: number; durationMs: number }) {
-  return (
-    <main className="flex min-h-screen flex-1 items-center justify-center bg-gradient-to-b from-brand-50 to-canvas px-4 py-10">
-      <section aria-live="polite" className="fade-up w-full max-w-md rounded-[28px] border border-line bg-white px-8 py-10 text-center shadow-pop">
-        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-ok-500 text-white shadow-lg shadow-ok-500/30">
-          <Check className="h-11 w-11" strokeWidth={3} aria-hidden="true" />
-        </span>
-
-        <h1 className="mt-6 text-[34px] font-black tracking-tight text-brand-900">Bonjour {data.firstName} !</h1>
-        <p className="mt-1 text-[22px] font-semibold text-ok-600">Visage reconnu avec succès.</p>
-
-        <div className="mx-auto mt-7 w-fit rounded-full bg-brand-50 p-2.5">
-          <Portrait data={data} className="h-36 w-36" />
-        </div>
-
-        <p className="mt-7 text-[22px] leading-snug text-ink">
-          Ouverture de votre espace…
-          <br />
-          Redirection en cours…
-        </p>
-
-        <div
-          className="mt-5 h-3 w-full overflow-hidden rounded-full bg-brand-100"
-          role="progressbar"
-          aria-label="Ouverture de votre espace"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-        >
-          <div
-            className="h-full rounded-full bg-brand-600 ease-linear motion-safe:transition-[width]"
-            style={{ width: `${progress}%`, transitionDuration: `${durationMs - 100}ms` }}
-          />
-        </div>
-      </section>
-    </main>
-  );
+export function ConnexionReussie({ data = DEMO, initialView = "Accueil" }: { data?: SeniorAccueilData; redirectMs?: number; initialView?: "Accueil" | "Messages" }) {
+  const voice = useVoiceAssistant();
+  return <SeniorAccueil data={data} voice={voice} view={initialView} />;
 }
 
 function Portrait({ data, className }: { data: SeniorAccueilData; className?: string }) {
@@ -136,7 +80,7 @@ const MOBILE_NAV: { label: string; icon: LucideIcon }[] = [
   { label: "Agenda", icon: CalendarDays },
   { label: "Médicaments", icon: Pill },
   { label: "Souvenirs", icon: Heart },
-  { label: "Plus", icon: LayoutGrid },
+  { label: "Messages", icon: MessageSquare },
 ];
 
 // Raccourcis : non reliés pour l'instant (le routage sera ajouté par l'équipe)
@@ -148,8 +92,8 @@ const SHORTCUTS: { label: string; icon: LucideIcon; cardCls: string; iconCls: st
   { label: "Mes proches", icon: Users, cardCls: "bg-brand-50 border-brand-100", iconCls: "bg-brand-700 text-white" },
 ];
 
-function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
-  const [listening, setListening] = useState(false);
+function SeniorAccueil({ data: demoData, voice, view }: { data: SeniorAccueilData; voice: VoiceController; view: "Accueil" | "Messages" }) {
+  const data = voice.connected ? { ...demoData, firstName: voice.profile, lastName: voice.lastName } : demoData;
   const [priseConfirmee, setPriseConfirmee] = useState(false);
 
   return (
@@ -180,31 +124,29 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
         <nav aria-label="Menu principal" className="sticky top-20 hidden h-[calc(100vh-5rem)] w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-white p-4 lg:flex">
           <ul className="space-y-1.5">
             {NAV.map(({ label, icon: Icon }) => {
-              const active = label === "Accueil";
+              const active = label === view;
+              const href = label === "Accueil" ? "/senior/connexion-reussie" : label === "Messages" ? "/senior/messages" : null;
+              const navClass = cx("flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[22px] font-bold transition-colors", active ? "bg-brand-50 text-brand-700" : "text-ink hover:bg-brand-50/60");
+              const content = <><Icon className={cx("h-7 w-7", active ? "text-brand-600" : "text-slate-500")} aria-hidden="true" />{label}</>;
               return (
                 <li key={label}>
-                  <button
-                    type="button"
-                    aria-current={active ? "page" : undefined}
-                    className={cx(
-                      "flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold transition-colors",
-                      active ? "bg-brand-50 text-brand-700" : "text-ink hover:bg-brand-50/60",
-                    )}
-                  >
-                    <Icon className={cx("h-7 w-7", active ? "text-brand-600" : "text-slate-500")} aria-hidden="true" />
-                    {label}
-                  </button>
+                  {href ? <Link href={href} aria-current={active ? "page" : undefined} className={navClass}>{content}</Link> : <button type="button" className={navClass}>{content}</button>}
                 </li>
               );
             })}
           </ul>
-          <button type="button" className="mt-auto flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold text-danger-600 hover:bg-danger-50">
-            <LogOut className="h-7 w-7" aria-hidden="true" /> Se déconnecter
+          <button type="button" disabled={voice.busy || voice.listening || voice.restoring} onClick={() => voice.connected ? void voice.disconnect() : voice.setLoginOpen(true)} className="mt-auto flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[22px] font-bold text-danger-600 hover:bg-danger-50 disabled:opacity-50">
+            <LogOut className="h-7 w-7" aria-hidden="true" /> {voice.connected ? "Se déconnecter" : "Se connecter"}
           </button>
         </nav>
 
         {/* Contenu */}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 pt-8 sm:px-8 lg:pb-10">
+        <main className={cx("mx-auto min-w-0 w-full flex-1 px-4 pb-32 pt-8 lg:pb-10", view === "Messages" ? "max-w-[1600px] sm:px-5" : "max-w-5xl sm:px-8")}>
+          {view === "Messages" ? <>
+            <h1 className="text-[34px] font-black tracking-tight text-brand-900 sm:text-[40px]">Mes messages</h1>
+            <p className="mt-1 text-[24px] text-ink">Écrivez ou parlez à votre assistant, simplement.</p>
+            <MessagesPanel voice={voice} />
+          </> : <>
           <h1 className="text-[34px] font-black tracking-tight text-brand-900 sm:text-[40px]">
             Bonjour {data.firstName},{" "}
             <span role="img" aria-label="salut">
@@ -213,23 +155,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
           </h1>
           <p className="mt-1 text-[24px] text-ink">Comment puis-je vous aider aujourd&apos;hui ?</p>
 
-          {/* Bouton micro */}
-          <div className="mt-8 flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => setListening((l) => !l)}
-              aria-pressed={listening}
-              aria-label={listening ? "Arrêter l'écoute" : "Parler à l'assistant"}
-              className={cx("relative flex h-40 w-40 items-center justify-center rounded-full", listening ? "pulse-ring text-brand-300" : "")}
-            >
-              <span className="absolute inset-0 rounded-full bg-brand-100/70" aria-hidden="true" />
-              <span className="relative z-10 flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-xl shadow-brand-600/40 transition-transform active:scale-95">
-                <Mic className="h-16 w-16" aria-hidden="true" />
-              </span>
-            </button>
-            <p className="mt-5 text-[26px] font-extrabold text-brand-700">{listening ? "Je vous écoute…" : "Parlez maintenant"}</p>
-            <p className="text-center text-[22px] text-muted">Dites votre demande, naturellement…</p>
-          </div>
+          <VoiceAssistant voice={voice} />
 
           {/* Raccourcis */}
           <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -288,23 +214,21 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
               </button>
             </section>
           )}
+          </>}
         </main>
       </div>
 
       {/* Barre de navigation (mobile) */}
       <nav aria-label="Menu principal" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-white lg:hidden">
-        {MOBILE_NAV.map(({ label, icon: Icon }) => (
-          <button
-            key={label}
-            type="button"
-            aria-current={label === "Accueil" ? "page" : undefined}
-            className={cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", label === "Accueil" ? "text-brand-700" : "text-ink")}
-          >
-            <Icon className={cx("h-7 w-7", label === "Accueil" ? "text-brand-600" : "text-slate-500")} aria-hidden="true" />
-            {label}
-          </button>
-        ))}
+        {MOBILE_NAV.map(({ label, icon: Icon }) => {
+          const active = label === view;
+          const href = label === "Accueil" ? "/senior/connexion-reussie" : label === "Messages" ? "/senior/messages" : null;
+          const navClass = cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", active ? "text-brand-700" : "text-ink");
+          const content = <><Icon className={cx("h-7 w-7", active ? "text-brand-600" : "text-slate-500")} aria-hidden="true" />{label}</>;
+          return href ? <Link key={label} href={href} aria-current={active ? "page" : undefined} className={navClass}>{content}</Link> : <button key={label} type="button" className={navClass}>{content}</button>;
+        })}
       </nav>
+      <SeniorConnectionDialog voice={voice} />
     </div>
   );
 }

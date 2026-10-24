@@ -9,6 +9,8 @@ Application web d'assistance vocale intelligente pour l'autonomie des personnes 
 
 Modules livrés dans cette version : **page d'accueil**, **Espace Aidant**, **Espace Administration** (l'interface vocale Senior est un module séparé).
 
+**F1 — Tasnim** : l'assistant vocal est maintenant intégré au micro de `/senior/connexion-reussie` : Whisper Groq → LLM avec contexte et faits autorisés → Edge TTS, avec secours navigateur. Voir [le guide F1](F1-TASNIM.md) pour la connexion du profil, les clés IA nécessaires et les limites vérifiées.
+
 ---
 
 ## 1. Démarrage rapide
@@ -30,6 +32,7 @@ Ouvrir http://localhost:3000.
 | Senior (appairage) | code `MARIE7` | PIN `1234` |
 
 > ⚠️ `npm run seed` **vide** les collections avant de les remplir.
+> 🛡️ Par sécurité, il **refuse de s'exécuter si la base contient déjà des données** (souvenirs, photos et comptes sont conservés). Pour tout effacer volontairement : `npm run seed -- --force`.
 
 ## 2. Configuration (`backend/.env`)
 
