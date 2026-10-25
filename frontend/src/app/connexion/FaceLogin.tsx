@@ -134,7 +134,9 @@ localStorage.setItem("seniorId", data.senior._id);
     console.log("Senior reconnu :", data.senior);
     console.log("Similarité :", data.similarity);
 
-    router.replace("/senior");
+router.replace("/senior/connexion-reussie");
+localStorage.setItem("seniorFirstName", data.senior.firstName);
+localStorage.setItem("seniorLastName", data.senior.lastName);
   } catch (error) {
     console.error("Erreur reconnaissance :", error);
 

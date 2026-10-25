@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import bcrypt from "bcryptjs";
 import { Alert, Contact, Event, Intake, Medication, Senior, WeeklySummary } from "../models/index.js";
 import { addDays, endOfDay, startOfDay } from "../utils/dates.js";
 import { badRequest, notFound, pick, requireFields } from "../utils/httpError.js";
 import { ensureIntakesForMedication, removeFutureIntakes } from "../services/scheduler.js";
 import { generateWeeklySummary, weeklyStats } from "../services/summary.js";
-
+import { registerSeniorFace } from "../services/compreface.service.js";
 import { parseSeniorBody, photoUrlFor, removeStoredPhoto, removeUploadedFile } from "../middlewares/seniorPhoto.js";
 import { trackEvent } from "../services/tracking.js";
 
@@ -60,6 +61,15 @@ export async function createSenior(req, res) {
       pairingCode: newPairingCode(),
       pinHash: await bcrypt.hash(pin, 10),
     });
+ if (req.file) {
+  const imageBuffer = fs.readFileSync(req.file.path);
+
+  await registerSeniorFace(
+    imageBuffer,
+    senior._id.toString(),
+    req.file.mimetype
+  );
+}
     // Le PIN n'est montré qu'une fois, à l'aidant
     res.status(201).json({ senior, pin });
   } catch (err) {
@@ -79,13 +89,32 @@ export async function updateSenior(req, res) {
     const oldPhoto = req.senior.photoUrl;
 
     Object.assign(req.senior, pick(body, SENIOR_FIELDS));
-    if (req.file) req.senior.photoUrl = photoUrlFor(req.file); // nouvelle photo
-    else if (body.removePhoto === "true") req.senior.photoUrl = undefined; // photo retirée
+
+    if (req.file) {
+      req.senior.photoUrl = photoUrlFor(req.file);
+    } else if (body.removePhoto === "true") {
+      req.senior.photoUrl = undefined;
+    }
 
     await req.senior.save();
 
+    // Si une nouvelle photo est envoyée,
+    // on l'enregistre aussi dans CompreFace
+    if (req.file) {
+      const imageBuffer = fs.readFileSync(req.file.path);
+
+      await registerSeniorFace(
+        imageBuffer,
+        req.senior._id.toString(),
+        req.file.mimetype
+      );
+    }
+
     // L'ancien fichier n'est supprimé qu'une fois la sauvegarde réussie
-    if (oldPhoto && oldPhoto !== req.senior.photoUrl) removeStoredPhoto(oldPhoto);
+    if (oldPhoto && oldPhoto !== req.senior.photoUrl) {
+      removeStoredPhoto(oldPhoto);
+    }
+
     res.json({ senior: req.senior });
   } catch (err) {
     removeUploadedFile(req.file);

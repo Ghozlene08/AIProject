@@ -84,6 +84,10 @@ export async function seniorFaceLogin(req, res) {
   }
 
   console.log("Résultat reconnaissance :", match);
+  
+  if (match.similarity < 0.8) {
+  throw unauthorized("Visage non reconnu");
+}
 
   const senior = await Senior.findById(match.subject).catch(() => null);
 

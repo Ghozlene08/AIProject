@@ -49,7 +49,20 @@ const REDIRECT_MS = 3000;
 export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { data?: SeniorAccueilData; redirectMs?: number }) {
   const [phase, setPhase] = useState<"succes" | "accueil">("succes");
   const [progress, setProgress] = useState(0);
+const [firstName, setFirstName] = useState(data.firstName);
+const [lastName, setLastName] = useState(data.lastName);
 
+useEffect(() => {
+  const storedFirstName = localStorage.getItem("seniorFirstName");
+   const storedLastName = localStorage.getItem("seniorLastName");
+
+  if (storedFirstName) {
+    setFirstName(storedFirstName);
+  }
+    if (storedLastName) {
+    setLastName(storedLastName);
+  }
+}, []);
   useEffect(() => {
     const start = window.setTimeout(() => setProgress(100), 50);
     const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
@@ -58,8 +71,18 @@ export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { da
       window.clearTimeout(done);
     };
   }, [redirectMs]);
-
-  return phase === "succes" ? <SuccesCard data={data} progress={progress} durationMs={redirectMs} /> : <SeniorAccueil data={data} />;
+const connectedSenior = {
+  ...data,
+  firstName,
+  lastName,
+};
+  return phase === "succes"
+  ? <SuccesCard
+      data={connectedSenior}
+      progress={progress}
+      durationMs={redirectMs}
+    />
+  : <SeniorAccueil data={connectedSenior} />;
 }
 
 /* ---------- 1. Carte de succès ---------- */
