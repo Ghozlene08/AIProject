@@ -43,3 +43,31 @@ export async function loadSenior(req, _res, next) {
   req.senior = senior;
   next();
 }
+
+/* ---------- Session du senior (appairage par code + PIN) ---------- */
+
+export const signSeniorToken = (senior) =>
+  jwt.sign({ sub: senior._id.toString(), role: "senior" }, jwtSecret(), { expiresIn: "30d" });
+
+// Vérifie un jeton de senior et charge son profil
+export async function requireSenior(req, _res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) throw unauthorized();
+  let payload;
+  try {
+    payload = jwt.verify(token, jwtSecret());
+  } catch {
+    throw unauthorized("Session expirée, veuillez vous reconnecter");
+  }
+  if (payload.role !== "senior") throw forbidden("Espace réservé au senior");
+  const senior = await Senior.findById(payload.sub);
+  if (!senior) throw unauthorized("Profil introuvable");
+  // Présence « en ligne » visible par l'aidant (au plus une écriture par minute)
+  if (!senior.lastSeenAt || Date.now() - senior.lastSeenAt.getTime() > 60000) {
+    senior.lastSeenAt = new Date();
+    await senior.save();
+  }
+  req.senior = senior;
+  next();
+}

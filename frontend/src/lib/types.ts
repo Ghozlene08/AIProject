@@ -61,7 +61,7 @@ export interface Intake {
   reminders: number;
 }
 
-export type EventType = "rdv" | "repas" | "activite" | "autre";
+export type EventType = "rdv" | "repas" | "activite" | "rappel" | "autre";
 
 export interface AgendaEvent {
   _id: string;

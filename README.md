@@ -71,6 +71,14 @@ Les quatre familles d'indicateurs (adoption, utilité, qualité IA, valeur pour 
 
 > **Pour l'équipe de l'interface Senior** : chaque action du senior doit être enregistrée avec `trackEvent()` (`backend/src/services/tracking.js`), par exemple `trackEvent({ senior, actor: "senior", module: "agenda", action: "rappel_cree", channel: "voix", intent: "creer_rappel", step: 4, outcome: "reussi", latencyMs })`. Les données de démonstration de `npm run seed` (42 seniors fictifs, 45 jours d'historique) simulent ces événements en attendant.
 
+**Interface Senior — module F2 « Agenda et rappels »** (`/senior/agenda`, page autonome à relier par l'équipe)
+- Connexion par code d'appairage + PIN (5 essais, puis blocage 15 minutes)
+- « Mon agenda » : prises et rendez-vous du jour, navigation entre les jours, bouton « Je l'ai pris », ajout d'un rappel à l'écran
+- **Assistant vocal** : « Qu'ai-je prévu aujourd'hui ? », « Rappelle-moi de prendre mon médicament à 20 heures » → *« Je vous rappellerai de prendre votre médicament aujourd'hui à 20 heures. C'est bien cela ? »* → « Oui » → rappel créé. Sans heure, l'assistant demande « À quelle heure ? ». « J'ai pris mon médicament » confirme la prise en cours
+- **Rappels proactifs** : vérification toutes les 30 s, rappel affiché en grand et lu à voix haute à l'heure prévue
+- **Briefing** « Écouter mon programme » : la suite de la journée, reformulée par le LLM puis contrôlée (prénom et heures obligatoires, aucun chiffre ajouté), sinon version factuelle
+- Chaîne vocale : Whisper (Groq) pour la transcription, Web Speech API du navigateur en secours, LLM gratuit pour la compréhension avec un analyseur français déterministe en garde-fou (heures et dates dites explicitement), synthèse vocale du navigateur pour les réponses. Mesuré : ~1,4 s de bout en bout (transcription 0,7 s + compréhension 0,6 s)
+
 **Planificateur** (toutes les minutes) : crée les prises du jour, compte les rappels et passe une prise en « manquée » après 2 rappels sans confirmation (30 min) → alerte + Telegram.
 
 ## 4. Modèles d'IA gratuits utilisés
@@ -103,6 +111,10 @@ Vérifiés le 18/10/2026 directement auprès de chaque fournisseur (les modèles
 | GET | `/admin/export?type=kpis|events|ai-calls` | Export CSV (sans donnée nominative) |
 | GET/PUT | `/admin/settings` | Seuils d'alerte et confidentialité |
 | GET | `/admin/ai-calls` | Journaux techniques |
+| POST | `/senior/pair` | Connexion du senior (code d'appairage + PIN) |
+| GET | `/senior/agenda?date=`, `/senior/briefing`, `/senior/reminders/due` | Agenda du jour, briefing, rappels à signaler |
+| POST | `/senior/intakes/:id/confirm`, `/senior/events`, `/senior/events/:id/ack` · DELETE `/senior/events/:id` | Prise confirmée, rappel ajouté, rappel vu, rappel annulé |
+| POST | `/senior/voice/transcribe` (audio brut), `/senior/voice/agenda`, `/senior/voice/confirm` | Transcription, compréhension, confirmation orale |
 | GET/PUT | `/admin/providers` | Fournisseurs IA |
 | POST | `/admin/ai/test` | Test de la passerelle |
 | CRUD | `/admin/users` | Utilisateurs |
@@ -125,6 +137,7 @@ backend/src/
 ├── middlewares/                 auth (JWT + rôles + accès au senior), erreurs
 └── services/
     ├── ai/                      gateway, anonymizer, validator, providers, defaults
+    ├── agenda/                  frenchParser (heures, dates, intentions en français), voiceAgenda (F2)
     ├── analytics.js             Indicateurs (adoption, utilité, qualité IA, aidants)
     ├── insights.js              Insights & recommandations (règles + LLM gratuit, chiffres vérifiés)
     ├── tracking.js              Enregistrement des événements d'usage

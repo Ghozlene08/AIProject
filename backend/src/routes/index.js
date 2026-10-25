@@ -1,10 +1,11 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import mongoose from "mongoose";
-import { loadSenior, requireAuth, requireRole } from "../middlewares/auth.js";
+import { loadSenior, requireAuth, requireRole, requireSenior } from "../middlewares/auth.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
 import * as stats from "../controllers/analytics.controller.js";
+import * as senior from "../controllers/senior.controller.js";
 
 const router = Router();
 
@@ -59,6 +60,23 @@ s.post("/summaries", aidant.createSummary);
 
 a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);
+
+/* ---------- Espace Senior (F2 : agenda et rappels) ---------- */
+router.post("/senior/pair", senior.pair);
+const sn = Router();
+sn.use(requireSenior);
+sn.get("/me", senior.me);
+sn.get("/agenda", senior.agenda);
+sn.get("/briefing", senior.briefing);
+sn.get("/reminders/due", senior.dueReminders);
+sn.post("/intakes/:id/confirm", senior.confirmIntake);
+sn.post("/events", senior.createEvent);
+sn.delete("/events/:id", senior.cancelEvent);
+sn.post("/events/:id/ack", senior.ackEvent);
+sn.post("/voice/transcribe", express.raw({ type: ["audio/*", "application/octet-stream"], limit: "10mb" }), senior.transcribe);
+sn.post("/voice/agenda", senior.voiceAgenda);
+sn.post("/voice/confirm", senior.voiceConfirm);
+router.use("/senior", sn);
 
 /* ---------- Administration ---------- */
 const ad = Router();
