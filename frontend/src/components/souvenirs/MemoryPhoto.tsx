@@ -10,14 +10,25 @@ import { ImageOff, Loader2 } from "lucide-react";
 import { cx } from "@/components/ui";
 import { fetchPhotoUrl } from "@/lib/souvenirs/api";
 
-export function MemoryPhoto({ path, alt, className }: { path: string; alt: string; className?: string }) {
+export function MemoryPhoto({
+  path,
+  alt,
+  className,
+  load = fetchPhotoUrl,
+}: {
+  path: string;
+  alt: string;
+  className?: string;
+  /** Fonction de téléchargement (par défaut : avec le jeton de l'aidant) */
+  load?: (path: string) => Promise<string>;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
-    fetchPhotoUrl(path)
+    load(path)
       .then((u) => {
         objectUrl = u;
         if (cancelled) URL.revokeObjectURL(u);
@@ -29,7 +40,7 @@ export function MemoryPhoto({ path, alt, className }: { path: string; alt: strin
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [path]);
+  }, [path, load]);
 
   if (failed || !url) {
     return (

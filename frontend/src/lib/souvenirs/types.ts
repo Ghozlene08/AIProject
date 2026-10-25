@@ -94,4 +94,14 @@ export interface MemoryStats {
     skipped: number;
   };
   daily: { date: string; listened: number; answered: number }[];
+  /** Détail des 5 dernières parties : question, réponse dite par le senior, résultat */
+  recentQuizzes: {
+    _id: string;
+    memoryTitle: string;
+    createdAt: string;
+    answers: { question?: string; given?: string; result: QuizResult }[];
+  }[];
 }
+
+/** Résultat d'une question : trouvée seul, avec 1 ou 2 indices, racontée par l'assistant, ou passée */
+export type QuizResult = "sans_indice" | "un_indice" | "deux_indices" | "donnee" | "passee";

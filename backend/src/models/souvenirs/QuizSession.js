@@ -14,6 +14,7 @@ export const ANSWER_RESULTS = ["sans_indice", "un_indice", "deux_indices", "donn
 const answerSchema = new mongoose.Schema(
   {
     questionIndex: { type: Number, required: true },
+    question: String, // texte de la question au moment du quiz (le quiz peut être régénéré ensuite)
     given: String, // dernière réponse entendue
     hintsUsed: { type: Number, min: 0, max: 2, default: 0 },
     result: { type: String, enum: ANSWER_RESULTS, required: true },

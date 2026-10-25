@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   CalendarDays,
@@ -47,18 +48,28 @@ const REDIRECT_MS = 3000;
  * 2) puis l'accueil du senior (assistant vocal + raccourcis).
  */
 export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { data?: SeniorAccueilData; redirectMs?: number }) {
-  const [phase, setPhase] = useState<"succes" | "accueil">("succes");
+  // "init" : un instant, le temps de savoir s'il faut montrer la carte de succès ou directement l'accueil
+  const [phase, setPhase] = useState<"init" | "succes" | "accueil">("init");
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Retour depuis une autre page Senior (?vue=accueil) : directement le tableau de bord,
+    // sans rejouer « Visage reconnu avec succès »
+    if (new URLSearchParams(window.location.search).get("vue") === "accueil") {
+      const show = window.setTimeout(() => setPhase("accueil"), 0);
+      return () => window.clearTimeout(show);
+    }
+    const first = window.setTimeout(() => setPhase("succes"), 0);
     const start = window.setTimeout(() => setProgress(100), 50);
     const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
     return () => {
+      window.clearTimeout(first);
       window.clearTimeout(start);
       window.clearTimeout(done);
     };
   }, [redirectMs]);
 
+  if (phase === "init") return <div className="min-h-screen flex-1 bg-canvas" />;
   return phase === "succes" ? <SuccesCard data={data} progress={progress} durationMs={redirectMs} /> : <SeniorAccueil data={data} />;
 }
 
@@ -148,7 +159,11 @@ const SHORTCUTS: { label: string; icon: LucideIcon; cardCls: string; iconCls: st
   { label: "Mes proches", icon: Users, cardCls: "bg-brand-50 border-brand-100", iconCls: "bg-brand-700 text-white" },
 ];
 
+// Pages déjà disponibles, ouvertes depuis le menu (les autres seront branchées par l'équipe)
+const ROUTES: Record<string, string> = { Souvenirs: "/senior/souvenirs" };
+
 function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
+  const router = useRouter();
   const [listening, setListening] = useState(false);
   const [priseConfirmee, setPriseConfirmee] = useState(false);
 
@@ -185,6 +200,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
                 <li key={label}>
                   <button
                     type="button"
+                    onClick={ROUTES[label] ? () => router.push(ROUTES[label]) : undefined}
                     aria-current={active ? "page" : undefined}
                     className={cx(
                       "flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold transition-colors",
@@ -297,6 +313,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
           <button
             key={label}
             type="button"
+            onClick={ROUTES[label] ? () => router.push(ROUTES[label]) : undefined}
             aria-current={label === "Accueil" ? "page" : undefined}
             className={cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", label === "Accueil" ? "text-brand-700" : "text-ink")}
           >
