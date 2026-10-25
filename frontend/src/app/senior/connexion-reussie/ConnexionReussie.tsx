@@ -51,10 +51,12 @@ export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { da
   const [progress, setProgress] = useState(0);
 const [firstName, setFirstName] = useState(data.firstName);
 const [lastName, setLastName] = useState(data.lastName);
+const [photoUrl, setPhotoUrl] = useState(data.photoUrl);
 
 useEffect(() => {
   const storedFirstName = localStorage.getItem("seniorFirstName");
    const storedLastName = localStorage.getItem("seniorLastName");
+   const storedPhotoUrl = localStorage.getItem("seniorPhotoUrl");
 
   if (storedFirstName) {
     setFirstName(storedFirstName);
@@ -62,6 +64,9 @@ useEffect(() => {
     if (storedLastName) {
     setLastName(storedLastName);
   }
+  if (storedPhotoUrl) {
+  setPhotoUrl(`http://localhost:5000${storedPhotoUrl}`);
+}
 }, []);
   useEffect(() => {
     const start = window.setTimeout(() => setProgress(100), 50);
@@ -75,6 +80,7 @@ const connectedSenior = {
   ...data,
   firstName,
   lastName,
+   photoUrl,
 };
   return phase === "succes"
   ? <SuccesCard
