@@ -11,11 +11,9 @@ import {
   FileText,
   Heart,
   Home,
-  LayoutGrid,
   Loader2,
   LogOut,
   MessageSquare,
-  Mic,
   Phone,
   PhoneCall,
   PhoneOff,
@@ -33,6 +31,11 @@ import { cx } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useCaregiverCall } from "@/lib/useCaregiverCall";
 import { formatDuration } from "@/lib/rtc";
+import { tokenStore } from "@/lib/api";
+import { ASSISTANT_PATHS, useSeniorAssistant } from "@/lib/assistant/useSeniorAssistant";
+import { AssistantMicro } from "@/components/assistant/AssistantMicro";
+import { MessagesPanel } from "@/components/assistant/MessagesPanel";
+import { SeniorRecords } from "@/components/assistant/SeniorRecords";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 const CHECKIN_POLL_MS = 10_000;
@@ -151,17 +154,8 @@ export interface SeniorAccueilData {
 const DEMO: SeniorAccueilData = {
   firstName: "Marie",
   lastName: "Dupont",
-  prochainePrise: { medicament: "Paracétamol 1 g", heure: "08:30" },
+  prochainePrise: null,
 };
-
-/* Contacts à appeler (à remplacer par les vrais contacts du senior) */
-type CallContact = { name: string; relation: string; phone: string };
-
-const CONTACTS: CallContact[] = [
-  { name: "Mon aidant", relation: "Aidant", phone: "+21600000000" },
-  { name: "Mon médecin", relation: "Médecin", phone: "+21600000001" },
-  { name: "Urgences", relation: "Secours", phone: "190" },
-];
 
 const REDIRECT_MS = 3000;
 
@@ -170,7 +164,8 @@ const REDIRECT_MS = 3000;
  * 1) carte « Visage reconnu avec succès » avec barre de progression,
  * 2) puis l'accueil du senior (assistant vocal + raccourcis).
  */
-export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { data?: SeniorAccueilData; redirectMs?: number }) {
+type SeniorView = "Accueil" | "Messages" | "Médicaments" | "Agenda";
+export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS, initialView = "Accueil" }: { data?: SeniorAccueilData; redirectMs?: number; initialView?: SeniorView }) {
   const [phase, setPhase] = useState<"succes" | "accueil">("succes");
   const [progress, setProgress] = useState(0);
 const [firstName, setFirstName] = useState(data.firstName);
@@ -206,13 +201,13 @@ const connectedSenior = {
   lastName,
    photoUrl,
 };
-  return phase === "succes"
+  return phase === "succes" && initialView === "Accueil"
   ? <SuccesCard
       data={connectedSenior}
       progress={progress}
       durationMs={redirectMs}
     />
-  : <SeniorAccueil data={connectedSenior} />;
+  : <SeniorAccueil data={connectedSenior} view={initialView} />;
 }
 
 /* ---------- 1. Carte de succès ---------- */
@@ -289,7 +284,7 @@ const MOBILE_NAV: { label: string; icon: LucideIcon }[] = [
   { label: "Agenda", icon: CalendarDays },
   { label: "Médicaments", icon: Pill },
   { label: "Souvenirs", icon: Heart },
-  { label: "Plus", icon: LayoutGrid },
+  { label: "Messages", icon: MessageSquare },
 ];
 
 // Raccourcis : non reliés pour l'instant (le routage sera ajouté par l'équipe)
@@ -311,8 +306,7 @@ type PendingCheckIn = {
   expiresAt: number;
 };
 
-function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
-  const [listening, setListening] = useState(false);
+function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorView }) {
   const [priseConfirmee, setPriseConfirmee] = useState(false);
   const [sosState, setSosState] = useState<SosState>("idle");
   const [sosError, setSosError] = useState("");
@@ -477,6 +471,12 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
   const checkInId = checkIn?.id;
   const checkInSpeech = checkIn ? `${checkIn.title}. ${checkIn.message}` : "";
   const checkInVisible = Boolean(checkIn) && sosState === "idle";
+  const assistantPaused = call.state !== "idle" || checkInVisible || sosState !== "idle";
+  const assistant = useSeniorAssistant({ paused: assistantPaused, onAction: (target) => {
+    if (target === "contacts") setCallOpen(true);
+    else if (target === "sos") setSosState("confirm");
+    else router.push(ASSISTANT_PATHS[target]);
+  } });
 
   useEffect(() => {
     if (!checkInId || !checkInVisible) return;
@@ -600,12 +600,17 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
         <nav aria-label="Menu principal" className="sticky top-20 hidden h-[calc(100vh-5rem)] w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-white p-4 lg:flex">
           <ul className="space-y-1.5">
             {NAV.map(({ label, icon: Icon }) => {
-              const active = label === "Accueil";
+              const active = label === view;
               return (
                 <li key={label}>
                   <button
                     type="button"
                     onClick={() => {
+                      if (label === "Messages") router.push("/senior/messages");
+                      if (label === "Accueil") router.push("/senior/connexion-reussie");
+                      if (label === "Médicaments") router.push("/senior/medicaments");
+                      if (label === "Agenda") router.push("/senior/agenda");
+                      if (label === "Proches") setCallOpen(true);
                       if (label === "Documents") {
                         router.push("/senior/documents");
                       }
@@ -623,13 +628,22 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
               );
             })}
           </ul>
-          <button type="button" className="mt-auto flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold text-danger-600 hover:bg-danger-50">
+          <button type="button" onClick={() => {
+            assistant.stop(); tokenStore.clear();
+            for (const key of ["seniorId", "seniorFirstName", "seniorLastName", "seniorPhotoUrl"]) localStorage.removeItem(key);
+            router.replace("/connexion?espace=senior");
+          }} disabled={call.state !== "idle" || assistant.busy || assistant.listening} className="mt-auto flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold text-danger-600 hover:bg-danger-50 disabled:opacity-50">
             <LogOut className="h-7 w-7" aria-hidden="true" /> Se déconnecter
           </button>
         </nav>
 
         {/* Contenu */}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 pt-8 sm:px-8 lg:pb-10">
+        <main className={cx("mx-auto min-w-0 w-full flex-1 px-4 pb-32 pt-8 sm:px-6 lg:pb-10", view === "Messages" ? "max-w-[1600px]" : "max-w-5xl")}>
+          {view === "Médicaments" || view === "Agenda" ? <SeniorRecords kind={view === "Médicaments" ? "medications" : "agenda"} /> : view === "Messages" ? <>
+            <h1 className="text-[34px] font-black tracking-tight text-brand-900 sm:text-[40px]">Mes messages</h1>
+            <p className="mt-1 text-[24px] text-ink">Écrivez ou parlez à votre assistant, simplement.</p>
+            <MessagesPanel assistant={assistant} paused={assistantPaused} />
+          </> : <>
           <h1 className="text-[34px] font-black tracking-tight text-brand-900 sm:text-[40px]">
             Bonjour {data.firstName},{" "}
             <span role="img" aria-label="salut">
@@ -638,23 +652,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
           </h1>
           <p className="mt-1 text-[24px] text-ink">Comment puis-je vous aider aujourd&apos;hui ?</p>
 
-          {/* Bouton micro */}
-          <div className="mt-8 flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => setListening((l) => !l)}
-              aria-pressed={listening}
-              aria-label={listening ? "Arrêter l'écoute" : "Parler à l'assistant"}
-              className={cx("relative flex h-40 w-40 items-center justify-center rounded-full", listening ? "pulse-ring text-brand-300" : "")}
-            >
-              <span className="absolute inset-0 rounded-full bg-brand-100/70" aria-hidden="true" />
-              <span className="relative z-10 flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-xl shadow-brand-600/40 transition-transform active:scale-95">
-                <Mic className="h-16 w-16" aria-hidden="true" />
-              </span>
-            </button>
-            <p className="mt-5 text-[26px] font-extrabold text-brand-700">{listening ? "Je vous écoute…" : "Parlez maintenant"}</p>
-            <p className="text-center text-[22px] text-muted">Dites votre demande, naturellement…</p>
-          </div>
+          <AssistantMicro assistant={assistant} paused={assistantPaused} />
 
           {/* Raccourcis */}
           <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -663,6 +661,8 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
                 key={label}
                 type="button"
                 onClick={() => {
+                  if (label === "Mes médicaments") router.push("/senior/medicaments");
+                  if (label === "Mon agenda") router.push("/senior/agenda");
                   if (label === "Mes documents") {
                     router.push("/senior/documents");
                   }
@@ -722,6 +722,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
               </button>
             </section>
           )}
+          </>}
         </main>
       </div>
 
@@ -731,10 +732,16 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
           <button
             key={label}
             type="button"
-            aria-current={label === "Accueil" ? "page" : undefined}
-            className={cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", label === "Accueil" ? "text-brand-700" : "text-ink")}
+            onClick={() => {
+              if (label === "Messages") router.push("/senior/messages");
+              if (label === "Accueil") router.push("/senior/connexion-reussie");
+              if (label === "Médicaments") router.push("/senior/medicaments");
+              if (label === "Agenda") router.push("/senior/agenda");
+            }}
+            aria-current={label === view ? "page" : undefined}
+            className={cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", label === view ? "text-brand-700" : "text-ink")}
           >
-            <Icon className={cx("h-7 w-7", label === "Accueil" ? "text-brand-600" : "text-slate-500")} aria-hidden="true" />
+            <Icon className={cx("h-7 w-7", label === view ? "text-brand-600" : "text-slate-500")} aria-hidden="true" />
             {label}
           </button>
         ))}
@@ -841,7 +848,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
             </div>
 
             <ul className="mt-6 space-y-3">
-              {CONTACTS.map((c) => (
+              {(assistant.session?.contacts || []).map((c) => (
                 <li key={c.phone}>
                   <a
                     href={`tel:${c.phone}`}
@@ -858,6 +865,8 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
                 </li>
               ))}
             </ul>
+            {!assistant.session?.contacts?.length && <p className="mt-5 text-[22px] text-ink">Aucun numéro de téléphone n’a été renseigné dans votre profil.</p>}
+            <button type="button" disabled={call.state !== "idle" || !assistant.session} onClick={() => { setCallOpen(false); call.start(); }} className="mt-5 min-h-16 w-full rounded-2xl bg-brand-700 px-5 text-[22px] font-bold text-white disabled:opacity-50">Appeler mon aidant dans CareAI</button>
 
             <button
               type="button"

@@ -6,7 +6,7 @@ const alertSchema = new mongoose.Schema(
     senior: { type: mongoose.Schema.Types.ObjectId, ref: "Senior", required: true, index: true },
     type: {
       type: String,
-      enum: ["appel_manque", "sos", "checkin_manque", "synthese", "info"],
+      enum: ["prise_manquee", "appel_manque", "sos", "checkin_manque", "synthese", "info"],
       required: true,
     },
     severity: { type: String, enum: ["haute", "moyenne", "info"], default: "moyenne" },

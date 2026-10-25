@@ -31,10 +31,10 @@ export function LoginForm() {
   const [showFaceLogin, setShowFaceLogin] = useState(false);
   // Déjà connecté : on rejoint directement son espace
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && space !== "senior") {
       router.replace(user.role === "admin" ? "/admin" : "/aidant");
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, space]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

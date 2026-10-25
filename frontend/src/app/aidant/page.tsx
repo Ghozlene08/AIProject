@@ -21,7 +21,7 @@ import { fmtDayCap, fmtRelative, fmtShort, fmtTime } from "@/lib/format";
 import type { Dashboard } from "@/lib/types";
 import { Avatar, Badge, Button, Card, CardHeader, ErrorBox, IconBubble, Spinner } from "@/components/ui";
 import { useCurrentSenior } from "./SeniorContext";
-import { ALERT_STYLE } from "./alertStyle";
+import { getAlertStyle } from "./alertStyle";
 
 export default function AidantDashboard() {
   const { user } = useAuth();
@@ -115,7 +115,7 @@ export default function AidantDashboard() {
           <ul className="divide-y divide-line px-5 pb-3">
             {data.alerts.length === 0 && <li className="py-4 text-sm text-muted">Aucune alerte. Tout va bien.</li>}
             {data.alerts.map((a) => {
-              const s = ALERT_STYLE[a.type];
+              const s = getAlertStyle(a.type, a.severity);
               return (
                 <li key={a._id} className="flex items-start gap-3 py-3">
                   <IconBubble tone={s.tone} size="sm">

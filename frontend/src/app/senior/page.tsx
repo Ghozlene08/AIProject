@@ -33,7 +33,7 @@ export default function SeniorPage() {
             <li>3. Vous parlez à l&apos;assistant, tout simplement.</li>
           </ol>
         </div>
-        <p className="mt-8 text-lg text-muted">L&apos;interface vocale du senior est livrée avec le module « Assistant vocal ».</p>
+        <Link href="/connexion?espace=senior" className="mt-8 flex min-h-16 items-center justify-center rounded-2xl bg-brand-700 px-6 text-[22px] font-bold text-white hover:bg-brand-800">Me connecter à mon espace Senior</Link>
       </main>
     </div>
   );

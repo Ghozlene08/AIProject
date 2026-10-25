@@ -69,22 +69,20 @@ export async function createSenior(req, res) {
     const body = parseSeniorBody(req.body);
     requireFields(body, ["firstName", "lastName"]);
     const pin = newPin();
-    const senior = await Senior.create({
+    const senior = new Senior({
       ...pick(body, SENIOR_FIELDS),
       photoUrl: photoUrlFor(req.file), // undefined si aucune photo envoyée
       caregivers: [req.user._id],
       pairingCode: newPairingCode(),
       pinHash: await bcrypt.hash(pin, 10),
     });
- if (req.file) {
-  const imageBuffer = fs.readFileSync(req.file.path);
-
-  await registerSeniorFace(
-    imageBuffer,
-    senior._id.toString(),
-    req.file.mimetype
-  );
-}
+    await senior.validate();
+    if (req.file) {
+      const imageBuffer = await fs.promises.readFile(req.file.path);
+      await registerSeniorFace(imageBuffer, senior._id.toString(), req.file.mimetype);
+    }
+    // Une panne CompreFace ne doit pas créer de profil privé de son PIN/photo.
+    await senior.save();
     // Le PIN n'est montré qu'une fois, à l'aidant
     res.status(201).json({ senior, pin });
   } catch (err) {
@@ -111,12 +109,12 @@ export async function updateSenior(req, res) {
       req.senior.photoUrl = undefined;
     }
 
-    await req.senior.save();
+    await req.senior.validate();
 
     // Si une nouvelle photo est envoyée,
     // on l'enregistre aussi dans CompreFace
     if (req.file) {
-      const imageBuffer = fs.readFileSync(req.file.path);
+      const imageBuffer = await fs.promises.readFile(req.file.path);
 
       await registerSeniorFace(
         imageBuffer,
@@ -124,6 +122,9 @@ export async function updateSenior(req, res) {
         req.file.mimetype
       );
     }
+
+    // Enregistrer seulement après validation de l'inscription faciale.
+    await req.senior.save();
 
     // L'ancien fichier n'est supprimé qu'une fois la sauvegarde réussie
     if (oldPhoto && oldPhoto !== req.senior.photoUrl) {

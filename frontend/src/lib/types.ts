@@ -76,6 +76,7 @@ export interface AgendaEvent {
 }
 
 export type AlertType =
+  | "prise_manquee"
   | "appel_manque"
   | "sos"
   | "checkin_manque"

@@ -10,12 +10,13 @@ import { fmtDateTime, fmtRelative } from "@/lib/format";
 import type { Alert, AlertType } from "@/lib/types";
 import { Badge, Button, Card, EmptyState, ErrorBox, IconBubble, PageHeader, Spinner, cx } from "@/components/ui";
 import { useCurrentSenior } from "../SeniorContext";
-import { ALERT_STYLE } from "../alertStyle";
+import { getAlertStyle } from "../alertStyle";
 import RiskReport from "../synthese/RiskReport";
 
 const FILTERS: { value: "" | "unread" | AlertType; label: string }[] = [
   { value: "", label: "Toutes" },
   { value: "unread", label: "Non lues" },
+  { value: "prise_manquee", label: "Prises manquées" },
   { value: "appel_manque", label: "Appels manqués" },
   { value: "sos", label: "SOS" },
   { value: "checkin_manque", label: "Check-ins manqués" },
@@ -324,7 +325,7 @@ export default function AlertesClient() {
         ) : alerts.length > 0 ? (
           <ul className="divide-y divide-line">
             {alerts.map((a) => {
-              const s = ALERT_STYLE[a.type];
+              const s = getAlertStyle(a.type, a.severity);
               const isUrgent = URGENT_TYPES.includes(a.type);
               const isActiveUrgent = isUrgent && !a.read;
 
