@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.3",
     "mon-app-ia": "file:..",
     "mongoose": "^9.11.2",
+    "msedge-tts": "^2.1.0",
     "multer": "^2.4.0",
     "pdf-parse": "^2.4.5",
     "senior-assistant": "file:..",

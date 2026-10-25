@@ -27,7 +27,7 @@ Ouvrir http://localhost:3000.
 |---|---|---|
 | Aidant | sophie.martin@exemple.com | Aidant123! |
 | Administrateur | admin@senior-assistant.tn | Admin123! |
-| Senior (appairage) | code `MARIE7` | PIN `1234` |
+| Senior | reconnaissance faciale | photo du visage enregistrée par l'aidant |
 
 > ⚠️ `npm run seed` **vide** les collections avant de les remplir.
 
@@ -72,7 +72,7 @@ Les quatre familles d'indicateurs (adoption, utilité, qualité IA, valeur pour 
 > **Pour l'équipe de l'interface Senior** : chaque action du senior doit être enregistrée avec `trackEvent()` (`backend/src/services/tracking.js`), par exemple `trackEvent({ senior, actor: "senior", module: "agenda", action: "rappel_cree", channel: "voix", intent: "creer_rappel", step: 4, outcome: "reussi", latencyMs })`. Les données de démonstration de `npm run seed` (42 seniors fictifs, 45 jours d'historique) simulent ces événements en attendant.
 
 **Interface Senior — module F2 « Agenda et rappels »** (`/senior/agenda`, page autonome à relier par l'équipe)
-- Connexion par code d'appairage + PIN (5 essais, puis blocage 15 minutes)
+- Connexion du senior **uniquement par reconnaissance faciale** (`/connexion?espace=senior`) ; sans session, la page invite à se connecter avec son visage
 - « Mon agenda » : prises et rendez-vous du jour, navigation entre les jours, bouton « Je l'ai pris », ajout d'un rappel à l'écran
 - **Assistant vocal** : « Qu'ai-je prévu aujourd'hui ? », « Rappelle-moi de prendre mon médicament à 20 heures » → *« Je vous rappellerai de prendre votre médicament aujourd'hui à 20 heures. C'est bien cela ? »* → « Oui » → rappel créé. Sans heure, l'assistant demande « À quelle heure ? ». « J'ai pris mon médicament » confirme la prise en cours
 - **Rappels proactifs** : vérification toutes les 30 s, rappel affiché en grand et lu à voix haute à l'heure prévue
@@ -111,7 +111,7 @@ Vérifiés le 18/10/2026 directement auprès de chaque fournisseur (les modèles
 | GET | `/admin/export?type=kpis|events|ai-calls` | Export CSV (sans donnée nominative) |
 | GET/PUT | `/admin/settings` | Seuils d'alerte et confidentialité |
 | GET | `/admin/ai-calls` | Journaux techniques |
-| POST | `/senior/pair` | Connexion du senior (code d'appairage + PIN) |
+| POST | `/auth/senior/face-login` | Connexion du senior par reconnaissance faciale |
 | GET | `/senior/agenda?date=`, `/senior/briefing`, `/senior/reminders/due` | Agenda du jour, briefing, rappels à signaler |
 | POST | `/senior/intakes/:id/confirm`, `/senior/events`, `/senior/events/:id/ack` · DELETE `/senior/events/:id` | Prise confirmée, rappel ajouté, rappel vu, rappel annulé |
 | POST | `/senior/voice/transcribe` (audio brut), `/senior/voice/agenda`, `/senior/voice/confirm` | Transcription, compréhension, confirmation orale |

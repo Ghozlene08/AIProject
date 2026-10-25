@@ -24,8 +24,6 @@ export interface Senior {
   city?: string;
   doctor?: { name?: string; specialty?: string; phone?: string };
   medicalNotes?: string;
-  pairingCode?: string;
-  pairedAt?: string;
   lastSeenAt?: string;
   consentAI?: boolean;
   createdAt: string;

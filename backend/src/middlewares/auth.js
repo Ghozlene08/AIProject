@@ -87,10 +87,8 @@ export async function loadSenior(req, _res, next) {
   next();
 }
 
-/* ---------- Session du senior (appairage par code + PIN) ---------- */
-
-export const signSeniorToken = (senior) =>
-  jwt.sign({ sub: senior._id.toString(), role: "senior" }, jwtSecret(), { expiresIn: "30d" });
+/* ---------- Session du senior (connexion par visage ou par code + PIN) ---------- */
+// Le jeton est créé par signSeniorToken (en haut du fichier), commun aux deux modes de connexion.
 
 // Vérifie un jeton de senior et charge son profil
 export async function requireSenior(req, _res, next) {

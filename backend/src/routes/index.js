@@ -1,6 +1,5 @@
 import express, { Router } from "express";
 import mongoose from "mongoose";
-HEAD
 import { loadSenior, requireAuth, requireRole, requireSenior } from "../middlewares/auth.js";
 import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js"; 
 import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
@@ -11,6 +10,7 @@ import * as stats from "../controllers/analytics.controller.js";
 import * as senior from "../controllers/senior.controller.js";
 import { uploadDocument } from "../middlewares/documentUpload.js";
 import * as document from "../controllers/document.controller.js";
+import { optionalSenior, trackDocument, trackFaceLogin } from "../middlewares/usageTracking.js";
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.get("/health", (_req, res) => {
 /* ---------- Authentification ---------- */
 router.post("/auth/register", auth.register);
 router.post("/auth/login", auth.login);
-router.post("/auth/senior/face-login",uploadFaceLogin,auth.seniorFaceLogin);
+router.post("/auth/senior/face-login", trackFaceLogin, uploadFaceLogin, auth.seniorFaceLogin);
 router.get("/auth/me", requireAuth, auth.me);
 router.put("/auth/me", requireAuth, auth.updateMe);
 router.put("/auth/password", requireAuth, auth.changePassword);
@@ -36,7 +36,6 @@ const s = Router({ mergeParams: true });
 s.use(loadSenior);
 s.get("/", aidant.getSenior);
 s.put("/", uploadSeniorPhoto, aidant.updateSenior); // ← CHANGED : lit le multipart + la photo
-s.post("/pairing", aidant.regeneratePairing);
 s.get("/dashboard", aidant.dashboard);
 
 s.post("/contacts", aidant.createContact);
@@ -68,7 +67,7 @@ a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);
 
 /* ---------- Espace Senior (F2 : agenda et rappels) ---------- */
-router.post("/senior/pair", senior.pair);
+// Connexion du senior : uniquement par reconnaissance faciale (POST /auth/senior/face-login)
 const sn = Router();
 sn.use(requireSenior);
 sn.get("/me", senior.me);
@@ -82,7 +81,14 @@ sn.post("/events/:id/ack", senior.ackEvent);
 sn.post("/voice/transcribe", express.raw({ type: ["audio/*", "application/octet-stream"], limit: "10mb" }), senior.transcribe);
 sn.post("/voice/agenda", senior.voiceAgenda);
 sn.post("/voice/confirm", senior.voiceConfirm);
+sn.post("/voice/tts", senior.tts);
 router.use("/senior", sn);
+
+/* ---------- Espace Senior : F3 « Photo → Compris » (module d'Arwa) ---------- */
+// Routes perdues lors de la résolution du conflit de fusion (e5dfb9e), rétablies à l'identique
+// avec en plus la mesure d'usage (le senior est identifié si une session est présente).
+router.post("/documents/ocr", optionalSenior, trackDocument, uploadDocument, document.extractDocumentText);
+router.post("/documents/explain", optionalSenior, trackDocument, uploadDocument, document.explainDocument);
 
 /* ---------- Administration ---------- */
 const ad = Router();

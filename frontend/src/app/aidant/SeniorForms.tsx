@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, HeartHandshake, KeyRound, Trash2, User, UserPlus } from "lucide-react";
+import { Camera, CheckCircle2, HeartHandshake, ScanFace, Trash2, User, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Senior } from "@/lib/types";
 import { Button, Card, ErrorBox, Field, Input, Modal, Textarea } from "@/components/ui";
@@ -13,7 +13,7 @@ import { useSenior } from "./SeniorContext";
 
 // URL publique de l'API (sans /api) pour afficher les images servies par le backend
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/api\/?$/, "").replace(/\/$/, "");
-const assetUrl = (path?: string) => (!path ? "" : /^https?:\/\//.test(path) ? path : `${API_ORIGIN}${path}`);
+export const assetUrl = (path?: string) => (!path ? "" : /^https?:\/\//.test(path) ? path : `${API_ORIGIN}${path}`);
 
 const MAX_PHOTO_MB = 2;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -181,22 +181,26 @@ function SeniorFields({ form, setForm }: { form: FormState; setForm: (f: FormSta
   );
 }
 
-export function PairingResult({ code, pin }: { code?: string; pin: string }) {
+// Après la création : le senior se connecte uniquement par reconnaissance faciale
+export function FaceSetupResult({ senior }: { senior: Senior }) {
+  const ready = Boolean(senior.photoUrl);
   return (
-    <div className="rounded-2xl bg-brand-50 p-5 text-center">
-      <KeyRound className="mx-auto h-8 w-8 text-brand-600" />
-      <p className="mt-3 text-sm text-muted">Communiquez ces codes à votre proche pour appairer son appareil :</p>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-white p-3">
-          <p className="text-xs font-bold uppercase text-muted">Code d&apos;appairage</p>
-          <p className="mt-1 font-mono text-2xl font-black tracking-widest text-brand-900">{code}</p>
-        </div>
-        <div className="rounded-xl bg-white p-3">
-          <p className="text-xs font-bold uppercase text-muted">Code PIN</p>
-          <p className="mt-1 font-mono text-2xl font-black tracking-widest text-brand-900">{pin}</p>
-        </div>
-      </div>
-      <p className="mt-3 text-xs text-muted">Le PIN ne sera plus affiché : notez-le maintenant.</p>
+    <div className={`rounded-2xl p-5 text-center ${ready ? "bg-ok-50" : "bg-warn-50"}`}>
+      {ready ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={assetUrl(senior.photoUrl)} alt={`Visage de ${senior.firstName}`} className="mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-white" />
+      ) : (
+        <ScanFace className="mx-auto h-10 w-10 text-warn-600" />
+      )}
+      <p className={`mt-3 flex items-center justify-center gap-2 font-bold ${ready ? "text-ok-600" : "text-warn-600"}`}>
+        {ready && <CheckCircle2 className="h-5 w-5" />}
+        {ready ? "Reconnaissance faciale activée" : "Reconnaissance faciale à activer"}
+      </p>
+      <p className="mt-1 text-sm text-ink">
+        {ready
+          ? `${senior.firstName} pourra se connecter simplement en regardant la caméra, sans code ni mot de passe.`
+          : `Ajoutez une photo du visage de ${senior.firstName} (bouton « Modifier » du profil) pour lui permettre de se connecter.`}
+      </p>
     </div>
   );
 }
@@ -210,14 +214,14 @@ function useCreateSenior(onDone?: () => void) {
   const [form, setForm] = useState<FormState>(toForm());
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<{ senior: Senior; pin: string } | null>(null);
+  const [result, setResult] = useState<{ senior: Senior } | null>(null);
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const res = await api.post<{ senior: Senior; pin: string }>("/aidant/seniors", toFormData(form));
+      const res = await api.post<{ senior: Senior }>("/aidant/seniors", toFormData(form));
       setResult(res);
     } catch (err) {
       setError((err as Error).message);
@@ -253,7 +257,7 @@ export function Onboarding() {
       <Card className="p-6 sm:p-8">
         {c.result ? (
           <div className="space-y-5">
-            <PairingResult code={c.result.senior.pairingCode} pin={c.result.pin} />
+            <FaceSetupResult senior={c.result.senior} />
             <Button className="w-full" size="lg" onClick={c.finish}>
               Accéder au tableau de bord
             </Button>
@@ -296,7 +300,7 @@ export function CreateSeniorModal({ open, onClose }: { open: boolean; onClose: (
       }
     >
       {c.result ? (
-        <PairingResult code={c.result.senior.pairingCode} pin={c.result.pin} />
+        <FaceSetupResult senior={c.result.senior} />
       ) : (
         <div className="space-y-4">
           <SeniorFields form={c.form} setForm={c.setForm} />

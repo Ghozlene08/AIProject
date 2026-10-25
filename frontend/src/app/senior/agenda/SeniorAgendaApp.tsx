@@ -1,15 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Activity,
   BellRing,
   CalendarDays,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
   Clock,
-  KeyRound,
   Loader2,
   LogOut,
   MapPin,
@@ -45,69 +46,25 @@ export function SeniorAgendaApp() {
   // Côté serveur : « pending » (rien n'est affiché avant de connaître la session)
   const token = useSyncExternalStore(subscribe, () => seniorToken.get() ?? "", () => "pending");
   if (token === "pending") return <div className="min-h-screen bg-canvas" />;
-  return token ? <AgendaScreen /> : <PairingGate />;
+  return token ? <AgendaScreen /> : <FaceLoginRequired />;
 }
 
-/* ---------- Connexion par code d'appairage + PIN ---------- */
+/* ---------- Pas de session : connexion par reconnaissance faciale ---------- */
 
-function PairingGate() {
-  const [code, setCode] = useState("");
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await seniorApi.post<{ token: string }>("/pair", { pairingCode: code, pin });
-      seniorToken.set(res.token);
-      window.dispatchEvent(new Event("sa:senior-login"));
-    } catch (err) {
-      setError((err as Error).message);
-      setLoading(false);
-    }
-  }
-
+function FaceLoginRequired() {
   return (
     <main className="flex min-h-screen flex-1 items-center justify-center bg-gradient-to-b from-brand-50 to-canvas px-4 py-10">
-      <form onSubmit={submit} className="w-full max-w-md rounded-[28px] border border-line bg-white p-8 shadow-pop">
-        <LogoMark className="h-12 w-12" />
+      <div className="w-full max-w-md rounded-[28px] border border-line bg-white p-8 text-center shadow-pop">
+        <LogoMark className="mx-auto h-12 w-12" />
         <h1 className="mt-5 text-[32px] font-black text-brand-900">Bonjour !</h1>
-        <p className="mt-1 text-[22px] leading-snug text-ink">Entrez le code et le PIN donnés par votre proche.</p>
-        <label className="mt-7 block text-[22px] font-bold text-ink">
-          Code d&apos;appairage
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            autoCapitalize="characters"
-            autoComplete="off"
-            required
-            className="mt-2 h-16 w-full rounded-2xl border-2 border-line px-4 font-mono text-[28px] font-bold tracking-widest text-ink focus:border-brand-400 focus:outline-none"
-          />
-        </label>
-        <label className="mt-5 block text-[22px] font-bold text-ink">
-          Code PIN
-          <input
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            type="password"
-            inputMode="numeric"
-            autoComplete="off"
-            required
-            className="mt-2 h-16 w-full rounded-2xl border-2 border-line px-4 font-mono text-[28px] tracking-[0.5em] text-ink focus:border-brand-400 focus:outline-none"
-          />
-        </label>
-        {error && (
-          <p role="alert" className="mt-4 rounded-2xl bg-danger-50 p-4 text-[20px] font-bold text-danger-600">
-            {error}
-          </p>
-        )}
-        <button disabled={loading} className="mt-6 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-600 text-[24px] font-extrabold text-white hover:bg-brand-700 disabled:opacity-60">
-          {loading ? <Loader2 className="h-7 w-7 animate-spin" /> : <KeyRound className="h-7 w-7" />} Me connecter
-        </button>
-      </form>
+        <p className="mt-2 text-[22px] leading-snug text-ink">Pour voir votre agenda, connectez-vous simplement avec votre visage.</p>
+        <Link
+          href="/connexion?espace=senior"
+          className="mt-8 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-600 text-[24px] font-extrabold text-white hover:bg-brand-700"
+        >
+          <Camera className="h-7 w-7" /> Me connecter avec mon visage
+        </Link>
+      </div>
     </main>
   );
 }
@@ -187,8 +144,9 @@ function AgendaScreen() {
     setBriefingLoading(true);
     try {
       const res = await seniorApi.get<{ text: string }>("/briefing");
+      // Voix naturelle : le briefing n'est pas un échange, quelques secondes de préparation sont acceptables
+      await speak(res.text, { natural: true });
       setBriefingLoading(false);
-      await speak(res.text);
     } catch {
       setBriefingLoading(false);
     }
@@ -222,10 +180,11 @@ function AgendaScreen() {
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-canvas">
       <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-line bg-white px-4 sm:px-8">
-        <span className="flex items-center gap-2.5">
+        <Link href="/senior/connexion-reussie#accueil" className="flex min-h-14 items-center gap-2.5 rounded-2xl pr-3" aria-label="Revenir à l'accueil">
+          <ChevronLeft className="h-7 w-7 text-brand-600" />
           <LogoMark className="h-9 w-9" />
-          <span className="text-xl font-extrabold tracking-tight text-brand-900">Senior Assistant</span>
-        </span>
+          <span className="hidden text-xl font-extrabold tracking-tight text-brand-900 sm:inline">Accueil</span>
+        </Link>
         <div className="flex items-center gap-3">
           {name && <span className="hidden text-lg font-bold text-ink sm:block">{name}</span>}
           <button onClick={logout} className="flex min-h-14 items-center gap-2 rounded-2xl px-4 text-lg font-bold text-danger-600 hover:bg-danger-50">
@@ -472,7 +431,7 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
 
   // Le rappel est lu à voix haute dès qu'il s'affiche
   useEffect(() => {
-    if (current) speak(current.speech);
+    if (current) speak(current.speech, { natural: true });
   }, [current]);
 
   if (!current) return null;

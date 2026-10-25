@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { seniorToken } from "@/lib/seniorApi";
 
 export default function DocumentSelectionPage() {
   const router = useRouter();
@@ -56,6 +57,8 @@ async function explainDocument() {
       "http://localhost:5000/api/documents/explain",
       {
         method: "POST",
+        // Session du senior (reconnaissance faciale) : l'action compte dans les indicateurs d'usage
+        headers: seniorToken.get() ? { Authorization: `Bearer ${seniorToken.get()}` } : undefined,
         body: formData,
       }
     );

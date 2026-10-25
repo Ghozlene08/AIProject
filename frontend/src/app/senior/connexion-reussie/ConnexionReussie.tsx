@@ -65,7 +65,8 @@ useEffect(() => {
 }, []);
   useEffect(() => {
     const start = window.setTimeout(() => setProgress(100), 50);
-    const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
+    // Retour depuis une autre page Senior (…#accueil) : pas de nouvel écran « Visage reconnu »
+    const done = window.setTimeout(() => setPhase("accueil"), window.location.hash === "#accueil" ? 0 : redirectMs);
     return () => {
       window.clearTimeout(start);
       window.clearTimeout(done);
@@ -162,7 +163,15 @@ const MOBILE_NAV: { label: string; icon: LucideIcon }[] = [
   { label: "Plus", icon: LayoutGrid },
 ];
 
-// Raccourcis : non reliés pour l'instant (le routage sera ajouté par l'équipe)
+// Pages Senior déjà disponibles (les autres entrées seront reliées au fil des modules)
+const ROUTES: Record<string, string> = {
+  Agenda: "/senior/agenda",
+  "Mon agenda": "/senior/agenda",
+  Documents: "/senior/documents",
+  "Mes documents": "/senior/documents",
+};
+
+// Raccourcis de l'accueil
 const SHORTCUTS: { label: string; icon: LucideIcon; cardCls: string; iconCls: string }[] = [
   { label: "Mon agenda", icon: CalendarDays, cardCls: "bg-brand-50 border-brand-100", iconCls: "bg-brand-600 text-white" },
   { label: "Mes médicaments", icon: Pill, cardCls: "bg-teal-50 border-teal-100", iconCls: "bg-teal-500 text-white" },
@@ -209,11 +218,7 @@ const router = useRouter();
                 <li key={label}>
                   <button
                     type="button"
-                     onClick={() => {
-    if (label === "Documents") {
-      router.push("/senior/documents");
-    }
-  }}
+                    onClick={() => ROUTES[label] && router.push(ROUTES[label])}
                     aria-current={active ? "page" : undefined}
                     className={cx(
                       "flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold transition-colors",
@@ -266,11 +271,7 @@ const router = useRouter();
               <button
                 key={label}
                 type="button"
-                 onClick={() => {
-      if (label === "Mes documents") {
-        router.push("/senior/documents");
-      }
-    }}
+                onClick={() => ROUTES[label] && router.push(ROUTES[label])}
                 className={cx("flex min-h-44 flex-col items-center justify-start gap-4 rounded-3xl border px-4 pb-5 pt-7 text-center shadow-card transition-shadow hover:shadow-pop", cardCls)}
               >
                 <span className={cx("flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm", iconCls)}>
@@ -331,6 +332,7 @@ const router = useRouter();
           <button
             key={label}
             type="button"
+            onClick={() => ROUTES[label] && router.push(ROUTES[label])}
             aria-current={label === "Accueil" ? "page" : undefined}
             className={cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", label === "Accueil" ? "text-brand-700" : "text-ink")}
           >

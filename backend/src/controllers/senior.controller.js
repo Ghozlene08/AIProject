@@ -1,9 +1,8 @@
-import bcrypt from "bcryptjs";
-import { Event, Intake, Senior } from "../models/index.js";
-import { signSeniorToken } from "../middlewares/auth.js";
-import { badRequest, forbidden, notFound, requireFields, unauthorized } from "../utils/httpError.js";
+import { Event, Intake } from "../models/index.js";
+import { badRequest, forbidden, notFound, requireFields } from "../utils/httpError.js";
 import { trackEvent } from "../services/tracking.js";
 import { logBrowserStt, transcribe as whisper } from "../services/ai/stt.js";
+import { synthesize } from "../services/ai/tts.js";
 import { parseYesNo, toISODate } from "../services/agenda/frenchParser.js";
 import { agendaFor, briefing as buildBriefing, fromISO, speakAgenda, speakDay, speakTime, toSecondPerson, understand } from "../services/agenda/voiceAgenda.js";
 
@@ -12,32 +11,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Formulation orale : minuscule initiale et « mon » → « votre »
 const lowerFirst = (s) => toSecondPerson(s.charAt(0).toLowerCase() + s.slice(1));
 
-/* ---------- Appairage : code + PIN (5 essais, puis blocage 15 minutes) ---------- */
-
-const attempts = new Map();
-const MAX_ATTEMPTS = 5;
-const LOCK_MS = 15 * 60 * 1000;
-
-export async function pair(req, res) {
-  requireFields(req.body, ["pairingCode", "pin"]);
-  const code = String(req.body.pairingCode).trim().toUpperCase();
-  const a = attempts.get(code);
-  if (a?.lockedUntil > Date.now()) throw unauthorized("Trop d'essais. Réessayez dans quelques minutes ou demandez de l'aide à votre proche.");
-
-  const senior = await Senior.findOne({ pairingCode: code }).select("+pinHash");
-  const ok = senior?.pinHash && (await bcrypt.compare(String(req.body.pin), senior.pinHash));
-  if (!ok) {
-    const count = (a?.count ?? 0) + 1;
-    attempts.set(code, { count, lockedUntil: count >= MAX_ATTEMPTS ? Date.now() + LOCK_MS : 0 });
-    throw unauthorized("Code ou PIN incorrect");
-  }
-  attempts.delete(code);
-  if (!senior.pairedAt) senior.pairedAt = new Date();
-  senior.lastSeenAt = new Date();
-  await senior.save();
-  trackEvent({ senior: senior._id, actor: "senior", module: "assistant", action: "connexion", channel: "ecran" });
-  res.json({ token: signSeniorToken(senior), senior: { firstName: senior.firstName, lastName: senior.lastName } });
-}
+// La session du senior est ouverte par la reconnaissance faciale (auth.controller → seniorFaceLogin)
 
 export async function me(req, res) {
   const s = req.senior;
@@ -150,6 +124,18 @@ export async function transcribe(req, res) {
   } catch (err) {
     // 503 : l'interface bascule sur la reconnaissance du navigateur
     res.status(503).json({ message: err.message, fallback: "webspeech" });
+  }
+}
+
+// Voix naturelle (Edge TTS → Gemini TTS) ; 503 → l'interface utilise la voix du navigateur
+export async function tts(req, res) {
+  requireFields(req.body, ["text"]);
+  try {
+    const out = await synthesize(req.body.text, req.senior._id);
+    res.set({ "Content-Type": out.mime, "X-TTS-Provider": out.provider, "Cache-Control": "no-store" });
+    res.send(out.audio);
+  } catch (err) {
+    res.status(503).json({ message: err.message, fallback: "navigateur" });
   }
 }
 

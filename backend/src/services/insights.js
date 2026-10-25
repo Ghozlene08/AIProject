@@ -32,6 +32,7 @@ export const FAILURE_LABELS = {
   document_illisible: "document illisible",
   delai_depasse: "délai dépassé",
   aucune_prise_due: "aucune prise à confirmer",
+  erreur_serveur: "erreur technique",
 };
 
 // Règles déterministes : constats chiffrés (et recommandations de repli si aucun LLM n'est disponible)

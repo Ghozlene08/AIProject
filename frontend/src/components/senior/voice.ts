@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_URL } from "@/lib/api";
+import { seniorToken } from "@/lib/seniorApi";
 
 /*
  * Voix de l'interface Senior.
@@ -161,7 +163,53 @@ function pickVoice() {
   return frenchVoice;
 }
 
-export function speak(text: string): Promise<void> {
+let currentAudio: HTMLAudioElement | null = null;
+
+/**
+ * Lit un texte à voix haute.
+ * - par défaut : voix du navigateur (instantanée, pour le dialogue où chaque seconde compte) ;
+ * - { natural: true } : voix naturelle du serveur (Edge TTS → Gemini TTS, ~4 s de préparation),
+ *   pour les rappels et le briefing ; en cas d'échec, retour à la voix du navigateur.
+ */
+export async function speak(text: string, options: { natural?: boolean } = {}): Promise<void> {
+  if (!text) return;
+  if (options.natural) {
+    const played = await playNatural(text);
+    if (played) return;
+  }
+  return speakBrowser(text);
+}
+
+async function playNatural(text: string): Promise<boolean> {
+  const token = seniorToken.get();
+  if (!token || typeof Audio === "undefined") return false;
+  try {
+    const res = await fetch(`${API_URL}/senior/voice/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return false;
+    const url = URL.createObjectURL(await res.blob());
+    stopSpeaking();
+    const audio = new Audio(url);
+    currentAudio = audio;
+    await new Promise<void>((resolve, reject) => {
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error("lecture"));
+      audio.play().catch(reject);
+    });
+    URL.revokeObjectURL(url);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    currentAudio = null;
+  }
+}
+
+function speakBrowser(text: string): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !window.speechSynthesis || !text) return resolve();
     window.speechSynthesis.cancel();
@@ -185,6 +233,10 @@ export function speak(text: string): Promise<void> {
 
 export const stopSpeaking = () => {
   if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
 };
 
 if (typeof window !== "undefined" && window.speechSynthesis) {
