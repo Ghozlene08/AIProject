@@ -16,6 +16,7 @@ import { AppShell, RequireRole, type NavItem } from "@/components/AppShell";
 import { Avatar, Select, Spinner } from "@/components/ui";
 import { SeniorProvider, useSenior } from "./SeniorContext";
 import { CreateSeniorModal, Onboarding } from "./SeniorForms";
+import SosAlertListener from "./SosAlertListener";
 
 export function AidantShell({ children }: { children: React.ReactNode }) {
   return (
@@ -73,6 +74,9 @@ function Inner({ children }: { children: React.ReactNode }) {
     <AppShell nav={nav} spaceLabel="Espace Aidant" home="/aidant" sidebarExtra={selector}>
       {loading ? <Spinner /> : senior ? children : <Onboarding />}
       <CreateSeniorModal open={creating} onClose={() => setCreating(false)} />
+
+      {/* Mounted here so the SOS popup works on every /aidant page, not only on /alertes */}
+      {senior && <SosAlertListener />}
     </AppShell>
   );
 }

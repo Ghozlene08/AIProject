@@ -12,7 +12,10 @@ const userSchema = new mongoose.Schema(
     notifications: {
       email: { type: Boolean, default: true },
       telegram: { type: Boolean, default: false },
-      telegramChatId: { type: String, trim: true },
+      telegramChatId: {
+        type: String,
+        default: null,
+      },
       sms: { type: Boolean, default: false },
     },
     lastLoginAt: Date,
@@ -27,5 +30,6 @@ userSchema.set("toJSON", {
     return ret;
   },
 });
+
 
 export default mongoose.model("User", userSchema);

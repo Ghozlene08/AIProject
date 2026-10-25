@@ -1,11 +1,15 @@
 import bcrypt from "bcryptjs";
-import { User , Senior } from "../models/index.js";
-import { signToken,signSeniorToken } from "../middlewares/auth.js";
+import mongoose from "mongoose";
+import { User, Senior } from "../models/index.js";
+import { signToken, signSeniorToken } from "../middlewares/auth.js";
 import { trackEvent } from "../services/tracking.js";
 import { badRequest, pick, requireFields, unauthorized } from "../utils/httpError.js";
 import { recognizeSenior } from "../services/compreface.service.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Similarité minimale pour accepter un visage (entre 0 et 1)
+const FACE_MIN_SIMILARITY = Number(process.env.FACE_MIN_SIMILARITY) || 0.9;
 
 function checkPassword(pwd) {
   if (typeof pwd !== "string" || pwd.length < 8) {
@@ -72,31 +76,48 @@ export async function changePassword(req, res) {
   await user.save();
   res.json({ message: "Mot de passe modifié" });
 }
+
+// Connexion d'un senior par reconnaissance faciale
 export async function seniorFaceLogin(req, res) {
   // La photo a été placée en mémoire par uploadFaceLogin
-  const match = await recognizeSenior(
-    req.file.buffer,
-    req.file.mimetype
-  );
+  if (!req.file || !req.file.buffer) {
+    throw badRequest("Photo manquante");
+  }
+
+  let match;
+  try {
+    match = await recognizeSenior(req.file.buffer, req.file.mimetype);
+  } catch (error) {
+    console.error("Erreur service reconnaissance faciale :", error);
+    throw new Error("Service de reconnaissance faciale indisponible");
+  }
+
+  console.log("Résultat reconnaissance :", match);
 
   if (!match) {
     throw unauthorized("Visage non reconnu");
   }
 
-  console.log("Résultat reconnaissance :", match);
-  
-  if (match.similarity < 0.8) {
-  throw unauthorized("Visage non reconnu");
-}
+  if (match.similarity < FACE_MIN_SIMILARITY) {
+    throw unauthorized("Visage non reconnu avec assez de certitude");
 
-  const senior = await Senior.findById(match.subject).catch(() => null);
-
-  if (!senior) {
-    throw unauthorized("Profil senior introuvable");
   }
 
-  // Pour l'instant, on ne bloque PAS encore selon similarity.
-  // On va d'abord faire plusieurs tests avant de fixer le seuil.
+  // Le sujet CompreFace doit être l'id MongoDB d'un senior
+  if (!mongoose.Types.ObjectId.isValid(match.subject)) {
+    console.error(
+      "Sujet CompreFace invalide (ce n'est pas un id Mongo) :",
+      match.subject
+    );
+    throw unauthorized("Ce visage n'est associé à aucun profil senior");
+  }
+
+  const senior = await Senior.findById(match.subject);
+
+  if (!senior) {
+    console.error("Aucun senior en base pour l'id :", match.subject);
+    throw unauthorized("Profil senior introuvable");
+  }
 
   const token = signSeniorToken(senior);
 

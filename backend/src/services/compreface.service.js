@@ -42,7 +42,8 @@ export async function recognizeSenior(imageBuffer, mimeType = "image/jpeg") {
   }
 
   const data = await response.json();
-
+  
+console.log("Réponse CompreFace :", JSON.stringify(data));
   // Aucun visage détecté
   if (!data.result?.length) {
     return null;
