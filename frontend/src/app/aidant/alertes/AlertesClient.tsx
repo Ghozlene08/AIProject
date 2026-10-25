@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { BellOff, CheckCheck, CheckCircle2, Send, ShieldAlert, Siren, Sparkles, Trash2, X } from "lucide-react";
 import { api, qs } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
-import { useSosEvents } from "@/lib/socket";
+import { getSocket, useSosEvents } from "@/lib/socket";
 import { fmtDateTime, fmtRelative } from "@/lib/format";
 import type { Alert, AlertType } from "@/lib/types";
 import { Badge, Button, Card, EmptyState, ErrorBox, IconBubble, PageHeader, Spinner, cx } from "@/components/ui";
@@ -16,11 +16,9 @@ import RiskReport from "../synthese/RiskReport";
 const FILTERS: { value: "" | "unread" | AlertType; label: string }[] = [
   { value: "", label: "Toutes" },
   { value: "unread", label: "Non lues" },
-  { value: "prise_manquee", label: "Prises manquées" },
+  { value: "appel_manque", label: "Appels manqués" },
   { value: "sos", label: "SOS" },
   { value: "checkin_manque", label: "Check-ins manqués" },
-  { value: "rdv", label: "Rendez-vous" },
-  { value: "symptome", label: "Symptômes" },
   { value: "synthese", label: "Synthèses" },
 ];
 
@@ -35,8 +33,17 @@ type SosSummary = {
   checkinCount: number;
 };
 
+// Types that support the bulk "clear treated history" action
+type BulkType = "sos" | "checkin_manque" | "appel_manque";
+
+const BULK_LABEL: Record<BulkType, string> = {
+  sos: "alertes SOS",
+  checkin_manque: "check-ins manqués",
+  appel_manque: "appels manqués",
+};
+
 // What the confirmation dialog is currently asking about
-type ConfirmState = { kind: "one"; alert: Alert } | { kind: "bulk"; type: "sos" | "checkin_manque" } | null;
+type ConfirmState = { kind: "one"; alert: Alert } | { kind: "bulk"; type: BulkType } | null;
 
 export default function AlertesClient() {
   const { senior, base, refreshUnread } = useCurrentSenior();
@@ -62,6 +69,18 @@ export default function AlertesClient() {
   };
 
   useSosEvents(refreshAll);
+
+  // A missed call just created an alert: refresh the list live
+  useEffect(() => {
+    const s = getSocket();
+    if (!s) return;
+    const onNewAlert = () => refreshAll();
+    s.on("alert:new", onNewAlert);
+    return () => {
+      s.off("alert:new", onNewAlert);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, query]);
 
   // Reload when the emergency popup marks an alert as handled
   useEffect(() => {
@@ -121,8 +140,8 @@ export default function AlertesClient() {
     }
   }
 
-  // Bulk cleanup is only offered on the SOS / Check-ins manqués filters
-  const canClean = filter === "sos" || filter === "checkin_manque";
+  // Bulk cleanup is offered on the SOS / Check-ins manqués / Appels manqués filters
+  const canClean = filter === "sos" || filter === "checkin_manque" || filter === "appel_manque";
 
   // Step 1: the buttons only OPEN the confirmation dialog
   function askDeleteOne(a: Alert) {
@@ -132,7 +151,7 @@ export default function AlertesClient() {
 
   function askCleanHistory() {
     if (deleting || !canClean) return;
-    setConfirm({ kind: "bulk", type: filter as "sos" | "checkin_manque" });
+    setConfirm({ kind: "bulk", type: filter as BulkType });
   }
 
   // Step 2: the dialog's "Supprimer" button runs the real deletion
@@ -200,9 +219,7 @@ export default function AlertesClient() {
   const confirmTitle = confirm?.kind === "one" ? "Supprimer cette alerte ?" : "Vider l'historique traité ?";
   const confirmText =
     confirm?.kind === "bulk"
-      ? confirm.type === "sos"
-        ? `Toutes les alertes SOS déjà traitées de ${senior.firstName} seront supprimées définitivement. Les alertes non traitées sont conservées.`
-        : `Tous les check-ins manqués déjà traités de ${senior.firstName} seront supprimés définitivement. Les alertes non traitées sont conservées.`
+      ? `Tous les ${BULK_LABEL[confirm.type]} déjà traités de ${senior.firstName} seront supprimés définitivement. Les alertes non traitées sont conservées.`
       : "Cette action est définitive : l'alerte ne pourra pas être récupérée.";
 
   return (
@@ -254,7 +271,7 @@ export default function AlertesClient() {
         })}
       </div>
 
-      {/* Bulk cleanup, only on the SOS / Check-ins manqués filters */}
+      {/* Bulk cleanup, on the SOS / Check-ins manqués / Appels manqués filters */}
       {canClean && hasTreated && (
         <div className="mb-3 flex justify-end">
           <Button variant="outline" onClick={askCleanHistory} disabled={deleting}>

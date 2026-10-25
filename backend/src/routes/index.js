@@ -9,7 +9,11 @@ import * as sos from "../controllers/sos.controller.js";
 import * as riskAnalyzer from "../controllers/riskAnalyzer.controller.js";
 import { analyzeSeniorRisk } from "../services/riskAnalyzer.service.js";
 import * as checkInController from "../controllers/checkIn.controller.js";
-
+import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
+import * as stats from "../controllers/analytics.controller.js";
+import { uploadDocument } from "../middlewares/documentUpload.js";
+import * as document from "../controllers/document.controller.js";
+import * as callCtrl from "../controllers/call.controller.js";
 const router = Router();
 
 router.get("/health", (_req, res) => {
@@ -19,6 +23,7 @@ router.get("/health", (_req, res) => {
 /* ---------- Authentification ---------- */
 router.post("/auth/register", auth.register);
 router.post("/auth/login", auth.login);
+router.post("/auth/senior/face-login", uploadFaceLogin, auth.seniorFaceLogin);
 router.get("/auth/me", requireAuth, auth.me);
 router.put("/auth/me", requireAuth, auth.updateMe);
 router.put("/auth/password", requireAuth, auth.changePassword);
@@ -33,6 +38,7 @@ a.post("/seniors", uploadSeniorPhoto, aidant.createSenior);
 a.get("/sos", aidant.listMySos); // aidant déduit du token
 a.get("/sos/active", aidant.listActiveSos); // non traités, format événement socket
 a.get("/caregivers/:caregiverId/sos", aidant.listCaregiverSos); // historique par id d'aidant
+a.get("/calls", callCtrl.listMyCalls); // all calls of the caregiver
 
 const s = Router({ mergeParams: true });
 s.use(loadSenior);
@@ -40,7 +46,8 @@ s.get("/", aidant.getSenior);
 s.put("/", uploadSeniorPhoto, aidant.updateSenior);
 s.post("/pairing", aidant.regeneratePairing);
 s.get("/dashboard", aidant.dashboard);
-
+s.get("/check-ins", checkInController.listCheckIns); // historique des check-ins d'un senior
+s.get("/calls", callCtrl.listSeniorCalls); // call history of one senior
 s.post("/sos", sos.triggerSOS);
 s.get("/sos", aidant.listSos); // urgences d'un senior (SOS + check-in manqué)
 
@@ -77,10 +84,68 @@ s.get("/risk-analysis", riskAnalyzer.analyzeRisk);
 a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);
 
+/* ---------- Documents senior ---------- */
+router.post("/documents/ocr", uploadDocument, document.extractDocumentText);
+router.post("/documents/explain", uploadDocument, document.explainDocument);
+
+/* ---------- Espace Senior ---------- */
+// Appel d'urgence : le senior est identifié par le seniorId envoyé dans le corps.
+// Anti-spam : un seul SOS toutes les 30 secondes par senior.
+const SOS_COOLDOWN_MS = 30_000;
+const lastSosAt = new Map();
+
+async function loadSeniorFromBody(req, res, next) {
+  try {
+    const seniorId = req.body?.seniorId;
+
+    if (!seniorId || !mongoose.Types.ObjectId.isValid(seniorId)) {
+      return res.status(400).json({ message: "Identifiant du senior invalide." });
+    }
+
+    const key = String(seniorId);
+    const last = lastSosAt.get(key) || 0;
+    if (Date.now() - last < SOS_COOLDOWN_MS) {
+      return res
+        .status(429)
+        .json({ message: "Une alerte vient déjà d'être envoyée. Patientez quelques secondes." });
+    }
+
+    const senior = await mongoose.model("Senior").findById(seniorId);
+    if (!senior) {
+      return res.status(404).json({ message: "Senior introuvable." });
+    }
+
+    req.senior = senior;
+
+    // Le délai n'est enregistré qu'une fois l'alerte réellement envoyée
+    res.on("finish", () => {
+      if (res.statusCode < 400) lastSosAt.set(key, Date.now());
+    });
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+router.post("/senior/sos", loadSeniorFromBody, sos.triggerSOS);
+
+// Check-in : le senior consulte et confirme (identifié par seniorId)
+router.get("/senior/check-in/pending", checkInController.getPendingCheckIn);
+router.post("/senior/check-in/:checkInId/respond", checkInController.respondToCheckInAsSenior);
+
 /* ---------- Administration ---------- */
 const ad = Router();
 ad.use(requireAuth, requireRole("admin"));
-ad.get("/overview", admin.overview);
+ad.get("/overview", stats.overview);
+ad.get("/analytics", stats.trends);
+ad.get("/users-stats", stats.users);
+ad.get("/ai-services", stats.aiServices);
+ad.get("/insights", stats.insightsList);
+ad.get("/report", stats.report);
+ad.get("/export", stats.exportCsv);
+ad.get("/settings", stats.getSettings);
+ad.put("/settings", stats.updateSettings);
 ad.get("/ai-calls", admin.listAiCalls);
 ad.get("/providers", admin.listProviders);
 ad.put("/providers/:id", admin.updateProvider);

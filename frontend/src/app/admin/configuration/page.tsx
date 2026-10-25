@@ -4,16 +4,46 @@ import { Database, Globe, Server } from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { AccountSettings } from "@/components/AccountSettings";
-import { Badge, Card, CardHeader, PageHeader } from "@/components/ui";
+import { Badge, Card, CardHeader, PageHeader, Tabs } from "@/components/ui";
+import { useHashTab } from "../shared";
+import { AccountsPanel } from "./AccountsPanel";
+import { ProvidersPanel } from "./ProvidersPanel";
+import { PrivacyPanel, ThresholdsPanel } from "./SettingsPanels";
 
-export default function AdminParametresPage() {
+const TABS = ["comptes", "fournisseurs", "seuils", "confidentialite", "compte"] as const;
+
+export default function ConfigurationPage() {
+  const [tab, setTab] = useHashTab(TABS, "comptes");
+  return (
+    <div className="fade-up">
+      <PageHeader title="Configuration" subtitle="Administration de la plateforme : comptes et rôles, fournisseurs IA, seuils d'alerte et confidentialité" />
+      <div className="mb-5 overflow-x-auto">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          items={[
+            { value: "comptes", label: "Comptes & rôles" },
+            { value: "fournisseurs", label: "Fournisseurs IA" },
+            { value: "seuils", label: "Seuils d'alerte" },
+            { value: "confidentialite", label: "Confidentialité" },
+            { value: "compte", label: "Mon compte" },
+          ]}
+        />
+      </div>
+      {tab === "comptes" && <AccountsPanel />}
+      {tab === "fournisseurs" && <ProvidersPanel />}
+      {tab === "seuils" && <ThresholdsPanel />}
+      {tab === "confidentialite" && <PrivacyPanel />}
+      {tab === "compte" && <MyAccount />}
+    </div>
+  );
+}
+
+function MyAccount() {
   const health = useApi<{ status: string; database: string }>("/health");
   const ok = health.data?.status === "ok";
-
   return (
-    <div className="fade-up space-y-6">
-      <PageHeader title="Paramètres" subtitle="Votre compte administrateur et l'état de la plateforme" />
-
+    <div className="space-y-6">
       <Card>
         <CardHeader title="État du système" icon={<Server className="h-5 w-5" />} />
         <div className="grid gap-4 px-5 pb-5 sm:grid-cols-3">
@@ -39,7 +69,6 @@ export default function AdminParametresPage() {
           </div>
         </div>
       </Card>
-
       <AccountSettings withNotifications={false} />
     </div>
   );

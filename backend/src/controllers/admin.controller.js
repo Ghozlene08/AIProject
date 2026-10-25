@@ -4,83 +4,9 @@ import { addDays, startOfDay } from "../utils/dates.js";
 import { badRequest, notFound, pick, requireFields } from "../utils/httpError.js";
 import { hasApiKey } from "../services/ai/providers.js";
 import { generateText } from "../services/ai/gateway.js";
+import { clearInsightsCache } from "../services/insights.js";
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/* ---------- Supervision ---------- */
-
-export async function overview(_req, res) {
-  const since = startOfDay();
-  const last24h = new Date(Date.now() - 24 * 3600 * 1000);
-
-  const [providers, perProvider, totals, hourly, recent, users, seniors] = await Promise.all([
-    AiProvider.find().sort({ capability: 1, priority: 1 }),
-    AiCall.aggregate([
-      { $match: { createdAt: { $gte: addDays(since, -6) } } },
-      {
-        $group: {
-          _id: "$provider",
-          calls: { $sum: 1 },
-          success: { $sum: { $cond: [{ $eq: ["$status", "succes"] }, 1, 0] } },
-          latency: { $avg: "$latencyMs" },
-        },
-      },
-    ]),
-    AiCall.aggregate([
-      { $match: { createdAt: { $gte: since } } },
-      {
-        $group: {
-          _id: null,
-          calls: { $sum: 1 },
-          errors: { $sum: { $cond: [{ $eq: ["$status", "erreur"] }, 1, 0] } },
-          fallbacks: { $sum: { $cond: ["$fallback", 1, 0] } },
-          latency: { $avg: "$latencyMs" },
-        },
-      },
-    ]),
-    AiCall.aggregate([
-      { $match: { createdAt: { $gte: last24h } } },
-      {
-        $group: {
-          _id: { $dateTrunc: { date: "$createdAt", unit: "hour" } },
-          calls: { $sum: 1 },
-          errors: { $sum: { $cond: [{ $eq: ["$status", "erreur"] }, 1, 0] } },
-          latency: { $avg: "$latencyMs" },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]),
-    AiCall.find().sort({ createdAt: -1 }).limit(6),
-    User.countDocuments(),
-    Senior.countDocuments(),
-  ]);
-
-  const t = totals[0] ?? { calls: 0, errors: 0, fallbacks: 0, latency: 0 };
-  const byName = Object.fromEntries(perProvider.map((p) => [p._id, p]));
-  res.json({
-    providers: providers.map((p) => {
-      const s = byName[p.name];
-      return {
-        ...p.toObject(),
-        configured: hasApiKey(p),
-        operational: p.enabled && !p.simulateFailure && hasApiKey(p),
-        calls: s?.calls ?? 0,
-        successRate: s ? Math.round((s.success / s.calls) * 1000) / 10 : null,
-        latencyMs: s ? Math.round(s.latency) : null,
-      };
-    }),
-    today: {
-      calls: t.calls,
-      errorRate: t.calls ? Math.round((t.errors / t.calls) * 1000) / 10 : 0,
-      successRate: t.calls ? Math.round(((t.calls - t.errors) / t.calls) * 1000) / 10 : 100,
-      fallbacks: t.fallbacks,
-      latencyMs: Math.round(t.latency || 0),
-    },
-    hourly: hourly.map((h) => ({ hour: h._id, calls: h.calls, errors: h.errors, latencyMs: Math.round(h.latency) })),
-    recent,
-    counts: { users, seniors },
-  });
-}
 
 export async function listAiCalls(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -112,8 +38,9 @@ export async function listProviders(_req, res) {
 export async function updateProvider(req, res) {
   const provider = await AiProvider.findById(req.params.id).catch(() => null);
   if (!provider) throw notFound("Fournisseur introuvable");
-  Object.assign(provider, pick(req.body, ["enabled", "priority", "role", "model", "simulateFailure"]));
+  Object.assign(provider, pick(req.body, ["enabled", "priority", "role", "model", "simulateFailure", "dailyQuota"]));
   await provider.save();
+  clearInsightsCache();
   res.json({ provider: { ...provider.toObject(), configured: hasApiKey(provider) } });
 }
 

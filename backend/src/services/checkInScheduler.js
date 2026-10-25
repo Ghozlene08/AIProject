@@ -17,7 +17,7 @@ export async function migrateLegacyCheckinAlerts() {
   try {
     const res = await Alert.updateMany(
       {
-        type: "prise_manquee",
+        type: "appel_manque",
         $or: [{ title: /check-?in/i }, { message: /check-?in/i }],
       },
       { $set: { type: "checkin_manque" } },

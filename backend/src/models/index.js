@@ -8,3 +8,5 @@ export { default as Alert } from "./Alert.js";
 export { default as WeeklySummary } from "./WeeklySummary.js";
 export { default as AiProvider } from "./AiProvider.js";
 export { default as AiCall } from "./AiCall.js";
+export { default as UsageEvent } from "./UsageEvent.js";
+export { default as PlatformSettings } from "./PlatformSettings.js";

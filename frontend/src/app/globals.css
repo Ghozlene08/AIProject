@@ -2,6 +2,9 @@
 
 /* Charte graphique Senior Assistant (maquettes) */
 @theme {
+  /* Très grands écrans : colonne latérale du tableau de bord admin */
+  --breakpoint-3xl: 112.5rem;
+
   --font-sans: "Nunito Sans Variable", "Segoe UI", system-ui, sans-serif;
 
   --color-brand-50: #eef5ff;
