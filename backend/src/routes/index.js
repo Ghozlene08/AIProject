@@ -1,11 +1,16 @@
 import express, { Router } from "express";
 import mongoose from "mongoose";
+HEAD
 import { loadSenior, requireAuth, requireRole, requireSenior } from "../middlewares/auth.js";
+import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js"; 
+import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
 import * as admin from "../controllers/admin.controller.js";
 import * as stats from "../controllers/analytics.controller.js";
 import * as senior from "../controllers/senior.controller.js";
+import { uploadDocument } from "../middlewares/documentUpload.js";
+import * as document from "../controllers/document.controller.js";
 
 const router = Router();
 
@@ -16,6 +21,7 @@ router.get("/health", (_req, res) => {
 /* ---------- Authentification ---------- */
 router.post("/auth/register", auth.register);
 router.post("/auth/login", auth.login);
+router.post("/auth/senior/face-login",uploadFaceLogin,auth.seniorFaceLogin);
 router.get("/auth/me", requireAuth, auth.me);
 router.put("/auth/me", requireAuth, auth.updateMe);
 router.put("/auth/password", requireAuth, auth.changePassword);
@@ -24,12 +30,12 @@ router.put("/auth/password", requireAuth, auth.changePassword);
 const a = Router();
 a.use(requireAuth, requireRole("aidant", "admin"));
 a.get("/seniors", aidant.listSeniors);
-a.post("/seniors", aidant.createSenior);
+a.post("/seniors", uploadSeniorPhoto, aidant.createSenior); // ← CHANGED : lit le multipart + la photo
 
 const s = Router({ mergeParams: true });
 s.use(loadSenior);
 s.get("/", aidant.getSenior);
-s.put("/", aidant.updateSenior);
+s.put("/", uploadSeniorPhoto, aidant.updateSenior); // ← CHANGED : lit le multipart + la photo
 s.post("/pairing", aidant.regeneratePairing);
 s.get("/dashboard", aidant.dashboard);
 

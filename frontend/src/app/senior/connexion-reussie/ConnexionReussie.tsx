@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { cx } from "@/components/ui";
-
+import { useRouter } from "next/navigation";
 /* ---------- Données fictives (à remplacer par l'API lors du branchement) ---------- */
 
 export interface SeniorAccueilData {
@@ -49,7 +49,20 @@ const REDIRECT_MS = 3000;
 export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { data?: SeniorAccueilData; redirectMs?: number }) {
   const [phase, setPhase] = useState<"succes" | "accueil">("succes");
   const [progress, setProgress] = useState(0);
+const [firstName, setFirstName] = useState(data.firstName);
+const [lastName, setLastName] = useState(data.lastName);
 
+useEffect(() => {
+  const storedFirstName = localStorage.getItem("seniorFirstName");
+   const storedLastName = localStorage.getItem("seniorLastName");
+
+  if (storedFirstName) {
+    setFirstName(storedFirstName);
+  }
+    if (storedLastName) {
+    setLastName(storedLastName);
+  }
+}, []);
   useEffect(() => {
     const start = window.setTimeout(() => setProgress(100), 50);
     const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
@@ -58,8 +71,18 @@ export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS }: { da
       window.clearTimeout(done);
     };
   }, [redirectMs]);
-
-  return phase === "succes" ? <SuccesCard data={data} progress={progress} durationMs={redirectMs} /> : <SeniorAccueil data={data} />;
+const connectedSenior = {
+  ...data,
+  firstName,
+  lastName,
+};
+  return phase === "succes"
+  ? <SuccesCard
+      data={connectedSenior}
+      progress={progress}
+      durationMs={redirectMs}
+    />
+  : <SeniorAccueil data={connectedSenior} />;
 }
 
 /* ---------- 1. Carte de succès ---------- */
@@ -149,9 +172,10 @@ const SHORTCUTS: { label: string; icon: LucideIcon; cardCls: string; iconCls: st
 ];
 
 function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
+  
   const [listening, setListening] = useState(false);
   const [priseConfirmee, setPriseConfirmee] = useState(false);
-
+const router = useRouter();
   return (
     <div className="fade-up flex min-h-screen flex-1 flex-col bg-canvas">
       {/* En-tête */}
@@ -185,6 +209,11 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
                 <li key={label}>
                   <button
                     type="button"
+                     onClick={() => {
+    if (label === "Documents") {
+      router.push("/senior/documents");
+    }
+  }}
                     aria-current={active ? "page" : undefined}
                     className={cx(
                       "flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold transition-colors",
@@ -237,6 +266,11 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
               <button
                 key={label}
                 type="button"
+                 onClick={() => {
+      if (label === "Mes documents") {
+        router.push("/senior/documents");
+      }
+    }}
                 className={cx("flex min-h-44 flex-col items-center justify-start gap-4 rounded-3xl border px-4 pb-5 pt-7 text-center shadow-card transition-shadow hover:shadow-pop", cardCls)}
               >
                 <span className={cx("flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm", iconCls)}>
