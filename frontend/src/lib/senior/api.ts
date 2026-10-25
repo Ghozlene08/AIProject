@@ -3,11 +3,11 @@
  * Le senior a son propre jeton (rôle "senior"), rangé à part de celui de l'aidant :
  * on peut ainsi être connecté en aidant dans un onglet et en senior dans un autre.
  *
- * ⚠️ TEMPORAIRE : tant que la connexion du senior (code + PIN / reconnaissance faciale)
- * n'est pas terminée par l'équipe, ensureSeniorSession() ouvre une session de démonstration
- * pour Marie (code MARIE7). Il suffira ensuite d'appeler seniorToken.set(jeton) après la connexion.
+ * La connexion par reconnaissance faciale de l'équipe fournit le jeton du senior (repris automatiquement).
+ * ⚠️ En son absence (développement), ensureSeniorSession() ouvre une session de démonstration
+ * pour Marie (code MARIE7).
  */
-import { API_URL, ApiError } from "@/lib/api";
+import { API_URL, ApiError, tokenStore } from "@/lib/api";
 
 const KEY = "sa_senior_token";
 const PROFILE_KEY = "sa_senior_profile";
@@ -56,8 +56,26 @@ const remember = (s: SeniorMe) => {
   return s;
 };
 
-/** Garantit une session senior et renvoie le profil (prénom pour l'accueil vocal) */
+/** Rôle contenu dans un jeton JWT (partie centrale, encodée en base64), sans le vérifier */
+function roleOf(token: string | null): string | null {
+  try {
+    const payload = token?.split(".")[1];
+    return payload ? JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))).role ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Garantit une session senior et renvoie le profil (prénom pour l'accueil vocal).
+ * 1. Si le senior s'est connecté par reconnaissance faciale (connexion de l'équipe, FaceLogin.tsx),
+ *    son jeton est rangé dans `sa_token` : on le reprend (même format : role "senior").
+ * 2. Sinon, et seulement en développement, une session de démonstration est ouverte pour Marie.
+ */
 export async function ensureSeniorSession(): Promise<SeniorMe> {
+  const faceLoginToken = tokenStore.get();
+  if (roleOf(faceLoginToken) === "senior" && faceLoginToken !== seniorToken.get()) seniorToken.set(faceLoginToken!);
+
   if (seniorToken.get()) {
     try {
       return remember((await seniorFetch<{ senior: SeniorMe }>("/senior/moi")).senior);
@@ -90,5 +108,20 @@ export async function speechToText(audio: Blob, { module, hint }: { module: stri
     return text;
   } catch {
     return null; // 503 STT_UNAVAILABLE, réseau, consentement refusé… → secours du navigateur
+  }
+}
+
+/**
+ * Déconnexion du senior : efface tout ce qui identifie le senior dans ce navigateur.
+ *  - le jeton du module (sa_senior_token) et le profil gardé en mémoire ;
+ *  - le jeton de la connexion par reconnaissance faciale (sa_token), SEULEMENT s'il s'agit
+ *    d'un jeton senior (on ne déconnecte pas un aidant connecté dans le même navigateur) ;
+ *  - les informations rangées par la connexion par visage (id, prénom, nom, photo).
+ */
+export function clearSeniorSession() {
+  seniorToken.clear();
+  if (roleOf(tokenStore.get()) === "senior") tokenStore.clear();
+  for (const key of [PROFILE_KEY, "seniorId", "seniorFirstName", "seniorLastName", "seniorPhotoUrl"]) {
+    window.localStorage.removeItem(key);
   }
 }
