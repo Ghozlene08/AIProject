@@ -10,3 +10,6 @@ export { default as AiProvider } from "./AiProvider.js";
 export { default as AiCall } from "./AiCall.js";
 export { default as UsageEvent } from "./UsageEvent.js";
 export { default as PlatformSettings } from "./PlatformSettings.js";
+// Module F4 — Souvenirs
+export { default as Memory } from "./souvenirs/Memory.js";
+export { default as QuizSession } from "./souvenirs/QuizSession.js";

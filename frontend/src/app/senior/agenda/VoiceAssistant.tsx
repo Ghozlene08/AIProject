@@ -5,6 +5,7 @@ import { Check, Keyboard, Loader2, Mic, Send, X } from "lucide-react";
 import { cx } from "@/components/ui";
 import { speak, stopSpeaking, useVoiceCapture, type Capture } from "@/components/senior/voice";
 import { type Proposal, type VoiceResponse, seniorApi } from "@/lib/seniorApi";
+import { playListenStart, playListenStop } from "@/lib/senior/sounds";
 
 type Phase = "listening" | "thinking" | "speaking" | "idle";
 type Pending = { kind: "confirmation"; proposal: Proposal } | { kind: "clarification"; context: NonNullable<VoiceResponse["context"]> } | null;
@@ -44,7 +45,9 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
   async function transcribe(capture: Capture): Promise<{ text: string; stt: string } | null> {
     if (capture.blob && capture.blob.size > 2000) {
       try {
-        const res = await seniorApi.audio<{ text: string }>("/voice/transcribe", capture.blob);
+        // Route commune de l'équipe ; l'indice de vocabulaire aide Whisper sur les demandes d'agenda
+        const hint = encodeURIComponent("rappel, rendez-vous, médicament, aujourd'hui, demain, heures, midi");
+        const res = await seniorApi.audio<{ text: string }>(`/stt?module=agenda&hint=${hint}`, capture.blob);
         if (res.text) return { text: res.text, stt: "whisper" };
       } catch {
         /* bascule sur le navigateur */
@@ -95,7 +98,9 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
     setPhase("listening");
     let capture: Capture;
     try {
+      await playListenStart(); // signal sonore commun de l'équipe : « à vous ! »
       capture = await listen();
+      playListenStop();
     } catch {
       setTyping(true);
       say("Je n'ai pas accès au micro. Vous pouvez écrire votre demande ci-dessous.");

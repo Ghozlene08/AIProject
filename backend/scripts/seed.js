@@ -1,5 +1,6 @@
 // Remplit la base avec des données de démonstration : npm run seed
 // ⚠️ Vide d'abord toutes les collections de l'application.
+// Protégé : refuse de s'exécuter si la base contient déjà des données (sauf avec --force).
 //
 // Les seniors, aidants et leur historique d'usage (45 jours) sont FICTIFS : ils servent à
 // alimenter l'espace administrateur tant que l'interface Senior n'enregistre pas encore
@@ -24,8 +25,24 @@ import {
 import { ensureProviders } from "../src/services/ai/defaults.js";
 import { generateWeeklySummary } from "../src/services/summary.js";
 import { addDays, atTime, startOfDay } from "../src/utils/dates.js";
+import { seedMemories } from "./souvenirs/seed.js";
 
 if (!(await connectDB(process.env.MONGODB_URI))) process.exit(1);
+
+/* Protection : si la base contient déjà des comptes, on ne touche à rien.
+ * Le seed efface TOUTE la base (souvenirs, photos, comptes…) : il ne doit jamais
+ * détruire par erreur des données saisies dans l'application.
+ * Pour tout effacer volontairement : npm run seed -- --force */
+// --force arrive soit en argument, soit via npm (variable npm_config_force) quand on lance depuis la racine
+const force = process.argv.includes("--force") || process.env.npm_config_force === "true";
+const existingUsers = await User.estimatedDocumentCount();
+if (existingUsers > 0 && !force) {
+  console.log("🛑 La base contient déjà des données : le seed n'a rien modifié.");
+  console.log("   Vos souvenirs, photos et comptes sont conservés.");
+  console.log("   Pour TOUT effacer et recréer les données de démonstration : npm run seed -- --force");
+  await mongoose.disconnect();
+  process.exit(0);
+}
 
 // Générateur pseudo-aléatoire déterministe : mêmes données à chaque seed
 let seed = 42;
@@ -332,6 +349,9 @@ await UsageEvent.collection.insertMany(events);
 await AiCall.collection.insertMany(calls);
 await Alert.collection.insertMany([...alerts, rdvAlert, symptom]);
 await WeeklySummary.collection.insertMany(summaries);
+
+// Module Souvenirs : souvenirs, écoutes et quiz de démonstration pour Marie
+await seedMemories({ senior: marie, caregiver: sophie });
 
 // Synthèse de Marie via la vraie passerelle IA (anonymisation + secours)
 await generateWeeklySummary(marie);

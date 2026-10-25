@@ -73,7 +73,17 @@ export interface AgendaEvent {
   status: "prevu" | "fait" | "annule";
 }
 
-export type AlertType = "prise_manquee" | "sos" | "rdv" | "symptome" | "synthese" | "info";
+// Types d'alerte de toute l'équipe (identiques à l'énumération de backend/src/models/Alert.js)
+export type AlertType =
+  | "prise_manquee"
+  | "appel_manque"
+  | "sos"
+  | "checkin_manque"
+  | "rdv"
+  | "symptome"
+  | "synthese"
+  | "souvenir_enregistre"
+  | "info";
 
 export interface Alert {
   _id: string;
@@ -82,7 +92,9 @@ export interface Alert {
   title: string;
   message?: string;
   read: boolean;
+  readAt?: string;
   sentTelegram?: boolean;
+  callId?: string; // appel_manque only: links the alert to the Call document
   createdAt: string;
 }
 
@@ -113,6 +125,7 @@ export interface Dashboard {
   nextEvent: AgendaEvent | null;
   upcoming: { kind: string; at: string; title: string; detail?: string }[];
   alerts: Alert[];
+  activeSos?: Alert[]; // urgences non traitées (SOS + check-in manqué)
   unreadAlerts: number;
   lastSummary: WeeklySummary | null;
 }

@@ -1,6 +1,10 @@
 // Client de l'API Express (backend). Le jeton JWT est ajouté automatiquement.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
 
+// Fichiers servis par le backend (photos…) : « /uploads/x.jpg » → « http://localhost:5000/uploads/x.jpg »
+export const API_ORIGIN = API_URL.replace(/\/api\/?$/, "");
+export const assetUrl = (path?: string | null) => (!path ? "" : /^(https?:|data:|blob:)/.test(path) ? path : `${API_ORIGIN}${path.startsWith("/") ? "" : "/"}${path}`);
+
 const TOKEN_KEY = "sa_token";
 
 export const tokenStore = {
@@ -59,6 +63,7 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body ?? {}),
   del: (path: string) => request<void>("DELETE", path),
+  
 };
 
 export const qs = (params: Record<string, string | number | boolean | undefined | null>) => {

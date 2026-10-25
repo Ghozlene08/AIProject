@@ -22,6 +22,7 @@ import type { Dashboard } from "@/lib/types";
 import { Avatar, Badge, Button, Card, CardHeader, ErrorBox, IconBubble, Spinner } from "@/components/ui";
 import { useCurrentSenior } from "./SeniorContext";
 import { ALERT_STYLE } from "./alertStyle";
+import { MemoryStatsCard } from "@/components/souvenirs/MemoryStatsCard";
 
 export default function AidantDashboard() {
   const { user } = useAuth();
@@ -78,6 +79,9 @@ export default function AidantDashboard() {
         <StatCard href="/aidant/agenda" icon={<CalendarDays className="h-5 w-5" />} tone="brand" label="Rendez-vous aujourd'hui" value={String(data.todayEvents)} />
         <StatCard href="/aidant/alertes" icon={<Bell className="h-5 w-5" />} tone="danger" label="Alertes non lues" value={String(data.unreadAlerts)} />
       </div>
+
+      {/* Module F4 — Souvenirs : écoutes, quiz et souvenirs à valider */}
+      <MemoryStatsCard base={base} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Prochain rendez-vous */}

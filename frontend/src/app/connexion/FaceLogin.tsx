@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { seniorToken } from "@/lib/seniorApi";
+import { seniorToken } from "@/lib/senior/api";
 import {
   Camera,
   CameraOff,
@@ -140,6 +140,9 @@ localStorage.setItem("seniorId", data.senior._id);
 router.replace("/senior/connexion-reussie");
 localStorage.setItem("seniorFirstName", data.senior.firstName);
 localStorage.setItem("seniorLastName", data.senior.lastName);
+if (data.senior.photoUrl) {
+  localStorage.setItem("seniorPhotoUrl", data.senior.photoUrl);
+}
   } catch (error) {
     console.error("Erreur reconnaissance :", error);
 

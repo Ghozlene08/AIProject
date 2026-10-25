@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CheckCircle2, HeartHandshake, ScanFace, Trash2, User, UserPlus } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, assetUrl as backendAssetUrl } from "@/lib/api";
 import type { Senior } from "@/lib/types";
 import { Button, Card, ErrorBox, Field, Input, Modal, Textarea } from "@/components/ui";
 import { useSenior } from "./SeniorContext";
@@ -13,7 +13,7 @@ import { useSenior } from "./SeniorContext";
 
 // URL publique de l'API (sans /api) pour afficher les images servies par le backend
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/api\/?$/, "").replace(/\/$/, "");
-export const assetUrl = (path?: string) => (!path ? "" : /^https?:\/\//.test(path) ? path : `${API_ORIGIN}${path}`);
+const assetUrl = (path?: string) => (!path ? "" : /^https?:\/\//.test(path) ? path : `${API_ORIGIN}${path}`);
 
 const MAX_PHOTO_MB = 2;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -188,7 +188,7 @@ export function FaceSetupResult({ senior }: { senior: Senior }) {
     <div className={`rounded-2xl p-5 text-center ${ready ? "bg-ok-50" : "bg-warn-50"}`}>
       {ready ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={assetUrl(senior.photoUrl)} alt={`Visage de ${senior.firstName}`} className="mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-white" />
+        <img src={backendAssetUrl(senior.photoUrl)} alt={`Visage de ${senior.firstName}`} className="mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-white" />
       ) : (
         <ScanFace className="mx-auto h-10 w-10 text-warn-600" />
       )}

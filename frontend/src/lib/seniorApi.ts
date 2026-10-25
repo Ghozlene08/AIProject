@@ -1,27 +1,9 @@
 // Client de l'API de l'espace Senior (session séparée de celle des aidants et administrateurs)
 import { API_URL } from "./api";
 
-const KEY = "sa_senior_token";
-
-export const seniorToken = {
-  get: () => {
-    try {
-      return window.localStorage.getItem(KEY);
-    } catch {
-      return null;
-    }
-  },
-  set: (t: string) => {
-    try {
-      window.localStorage.setItem(KEY, t);
-    } catch {}
-  },
-  clear: () => {
-    try {
-      window.localStorage.removeItem(KEY);
-    } catch {}
-  },
-};
+// Session du senior : helper commun de l'équipe (lib/senior/api.ts, même clé « sa_senior_token »)
+import { seniorToken } from "./senior/api";
+export { seniorToken };
 
 export class SeniorApiError extends Error {
   constructor(

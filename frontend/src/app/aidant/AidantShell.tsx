@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Bell,
+  BookHeart,
   CalendarDays,
   ClipboardCheck,
   FileText,
@@ -16,6 +17,7 @@ import { AppShell, RequireRole, type NavItem } from "@/components/AppShell";
 import { Avatar, Select, Spinner } from "@/components/ui";
 import { SeniorProvider, useSenior } from "./SeniorContext";
 import { CreateSeniorModal, Onboarding } from "./SeniorForms";
+import SosAlertListener from "./SosAlertListener";
 
 export function AidantShell({ children }: { children: React.ReactNode }) {
   return (
@@ -37,6 +39,7 @@ function Inner({ children }: { children: React.ReactNode }) {
     { href: "/aidant/traitements", label: "Traitements", icon: Pill },
     { href: "/aidant/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/aidant/suivi", label: "Suivi des prises", icon: ClipboardCheck },
+    { href: "/aidant/souvenirs", label: "Souvenirs", icon: BookHeart }, // Module F4
     { href: "/aidant/alertes", label: "Alertes", icon: Bell, badge: unread },
     { href: "/aidant/synthese", label: "Synthèse hebdo", icon: FileText },
     { href: "/aidant/parametres", label: "Paramètres", icon: Settings },
@@ -73,6 +76,9 @@ function Inner({ children }: { children: React.ReactNode }) {
     <AppShell nav={nav} spaceLabel="Espace Aidant" home="/aidant" sidebarExtra={selector}>
       {loading ? <Spinner /> : senior ? children : <Onboarding />}
       <CreateSeniorModal open={creating} onClose={() => setCreating(false)} />
+
+      {/* Mounted here so the SOS popup works on every /aidant page, not only on /alertes */}
+      {senior && <SosAlertListener />}
     </AppShell>
   );
 }

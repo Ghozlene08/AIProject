@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 import { Alert, Contact, Event, Intake, Medication, Senior, WeeklySummary } from "../models/index.js";
 import { addDays, endOfDay, startOfDay } from "../utils/dates.js";
 import { badRequest, notFound, pick, requireFields } from "../utils/httpError.js";
@@ -20,6 +22,8 @@ const SENIOR_FIELDS = ["firstName", "lastName", "birthDate", "phone", "address",
 const CONTACT_FIELDS = ["name", "relation", "phone", "isEmergency", "order"];
 const MED_FIELDS = ["name", "dosage", "posology", "times", "instructions", "active"];
 const EVENT_FIELDS = ["title", "type", "startAt", "location", "notes", "status"];
+const ALERT_TYPES = ["appel_manque", "sos", "checkin_manque", "synthese", "info"]; // ← CHANGED
+const URGENT_TYPES = ["sos", "checkin_manque"]; // ← NEW : alertes qui ouvrent la popup d'urgence
 
 
 async function findOwned(Model, id, senior) {
@@ -31,6 +35,18 @@ async function findOwned(Model, id, senior) {
 const range = (from, to) => ({
   $gte: from ? new Date(from) : startOfDay(),
   $lte: to ? new Date(to) : endOfDay(),
+});
+
+// Même forme que l'événement temps réel "sos:alert" (SOS et check-in manqué)
+const toSosEvent = (alert, senior) => ({
+  alertId: String(alert._id),
+  seniorId: String(alert.senior),
+  seniorName: senior ? `${senior.firstName || ""} ${senior.lastName || ""}`.trim() : "",
+  type: alert.type, // ← CHANGED : garde le vrai type ("sos" ou "checkin_manque")
+  severity: alert.severity,
+  title: alert.title,
+  message: alert.message,
+  createdAt: alert.createdAt,
 });
 
 /* ---------- Profils seniors ---------- */
@@ -116,12 +132,14 @@ export async function updateSenior(req, res) {
 export async function dashboard(req, res) {
   const id = req.senior._id;
   const now = new Date();
-  const [todayIntakes, nextEvents, alerts, unread, lastSummary] = await Promise.all([
+  const [todayIntakes, nextEvents, alerts, unread, lastSummary, activeSos] = await Promise.all([
     Intake.find({ senior: id, scheduledAt: range() }).populate("medication", "name dosage").sort({ scheduledAt: 1 }),
     Event.find({ senior: id, startAt: { $gte: now }, status: { $ne: "annule" } }).sort({ startAt: 1 }).limit(4),
     Alert.find({ senior: id }).sort({ createdAt: -1 }).limit(5),
     Alert.countDocuments({ senior: id, read: false }),
     WeeklySummary.findOne({ senior: id }).sort({ createdAt: -1 }),
+    // Urgences non traitées (SOS + check-in manqué), même au-delà des 5 dernières alertes
+    Alert.find({ senior: id, type: { $in: URGENT_TYPES }, read: false }).sort({ createdAt: -1 }).limit(5), // ← CHANGED
   ]);
   await markDelivered(id);
   const todayEvents = await Event.countDocuments({ senior: id, startAt: range(), status: { $ne: "annule" } });
@@ -148,6 +166,7 @@ export async function dashboard(req, res) {
     nextEvent: nextEvents[0] ?? null,
     upcoming,
     alerts,
+    activeSos,
     unreadAlerts: unread,
     lastSummary,
   });
@@ -274,9 +293,13 @@ export async function deleteEvent(req, res) {
 
 /* ---------- Alertes ---------- */
 
+// GET /aidant/seniors/:seniorId/alerts?type=sos&unread=true
 export async function listAlerts(req, res) {
   const filter = { senior: req.senior._id };
-  if (req.query.type) filter.type = req.query.type;
+  if (req.query.type) {
+    if (!ALERT_TYPES.includes(req.query.type)) throw badRequest("Type d'alerte invalide");
+    filter.type = req.query.type;
+  }
   if (req.query.unread === "true") filter.read = false;
   await markDelivered(req.senior._id);
   const alerts = await Alert.find(filter).sort({ createdAt: -1 }).limit(100);
@@ -299,6 +322,163 @@ export async function markAllAlerts(req, res) {
   const now = new Date();
   await Alert.updateMany({ senior: req.senior._id, read: false }, { read: true, readAt: now, deliveredAt: now });
   res.json({ ok: true });
+}
+
+/* ---------- SOS ---------- */
+
+// GET /aidant/seniors/:seniorId/sos?unread=true&limit=50
+// Historique SOS d'un senior + nombre de SOS non traités (SOS uniquement)
+// GET /aidant/seniors/:seniorId/sos?unread=true&limit=50
+// Urgences d'un senior (SOS + check-in manqué) + compteurs de non traitées
+export async function listSos(req, res) {
+  const filter = { senior: req.senior._id, type: { $in: URGENT_TYPES } };
+  if (req.query.unread === "true") filter.read = false;
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+
+  const unreadBase = { senior: req.senior._id, read: false };
+
+  const [alerts, sosCount, checkinCount] = await Promise.all([
+    Alert.find(filter).sort({ createdAt: -1 }).limit(limit),
+    Alert.countDocuments({ ...unreadBase, type: "sos" }),
+    Alert.countDocuments({ ...unreadBase, type: "checkin_manque" }),
+  ]);
+
+  res.json({
+    alerts,
+    sosCount,
+    checkinCount,
+    activeCount: sosCount + checkinCount, // total des urgences non traitées
+  });
+}
+
+// GET /aidant/sos/active
+// Urgences non traitées (SOS + check-in manqué) de TOUS les seniors de l'aidant connecté.
+// Appelé au chargement de l'app pour récupérer ce qui a été reçu hors ligne.
+export async function listActiveSos(req, res) {
+  const seniors = await Senior.find({ caregivers: req.user._id }).select("firstName lastName");
+  const byId = new Map(seniors.map((s) => [String(s._id), s]));
+
+  const alerts = await Alert.find({
+    senior: { $in: seniors.map((s) => s._id) },
+    type: { $in: URGENT_TYPES }, // ← CHANGED (was type: "sos")
+    read: false,
+  })
+    .sort({ createdAt: -1 })
+    .limit(50);
+
+  const events = alerts.map((a) => toSosEvent(a, byId.get(String(a.senior))));
+  res.json({ count: events.length, events });
+}
+
+// Logique commune de l'historique SOS d'un aidant (SOS uniquement)
+async function sosHistory(caregiverId, query) {
+  // Seniors rattachés à cet aidant (le périmètre ne dépend jamais du client)
+  const seniors = await Senior.find({ caregivers: caregiverId })
+    .select("firstName lastName photoUrl")
+    .sort({ firstName: 1 });
+  let seniorIds = seniors.map((s) => s._id);
+
+  if (query.seniorId) {
+    if (!mongoose.isValidObjectId(query.seniorId)) throw badRequest("Identifiant senior invalide");
+    // On filtre à l'intérieur du périmètre : un senior d'un autre aidant donne 0 résultat
+    seniorIds = seniorIds.filter((id) => String(id) === String(query.seniorId));
+  }
+
+  const filter = { senior: { $in: seniorIds }, type: "sos" };
+
+  // status = all | unread | read
+  if (query.status === "unread" || query.unread === "true") filter.read = false;
+  else if (query.status === "read") filter.read = true;
+
+  // Période
+  if (query.from || query.to) {
+    filter.createdAt = {};
+    if (query.from) {
+      const d = new Date(query.from);
+      if (Number.isNaN(d.getTime())) throw badRequest("Date de début invalide");
+      filter.createdAt.$gte = startOfDay(d);
+    }
+    if (query.to) {
+      const d = new Date(query.to);
+      if (Number.isNaN(d.getTime())) throw badRequest("Date de fin invalide");
+      filter.createdAt.$lte = endOfDay(d);
+    }
+  }
+
+  const limit = Math.min(Number(query.limit) || 20, 100);
+  const page = Math.max(Number(query.page) || 1, 1);
+
+  const allIds = seniors.map((s) => s._id);
+  const [alerts, total, unreadCount, totalAll] = await Promise.all([
+    Alert.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate("senior", "firstName lastName photoUrl"),
+    Alert.countDocuments(filter),
+    Alert.countDocuments({ senior: { $in: allIds }, type: "sos", read: false }),
+    Alert.countDocuments({ senior: { $in: allIds }, type: "sos" }),
+  ]);
+
+  return {
+    alerts,
+    seniors, // pour alimenter le filtre « senior » côté interface
+    total, // nombre de résultats pour les filtres appliqués
+    unreadCount, // SOS non traités (tous seniors)
+    totalAll, // tous les SOS de l'aidant
+    page,
+    pages: Math.ceil(total / limit) || 1,
+  };
+}
+
+// DELETE /aidant/seniors/:seniorId/alerts/:id
+// Supprime une alerte. Une urgence non traitée ne peut pas être supprimée.
+export async function deleteAlert(req, res) {
+  const alert = await findOwned(Alert, req.params.id, req.senior);
+
+  if (URGENT_TYPES.includes(alert.type) && !alert.read) {
+    throw badRequest("Marquez d'abord cette urgence comme traitée avant de la supprimer.");
+  }
+
+  await alert.deleteOne();
+  res.status(204).end();
+}
+
+// DELETE /aidant/seniors/:seniorId/alerts?type=sos&olderThanDays=30
+// Nettoyage en masse : supprime uniquement les alertes DÉJÀ TRAITÉES d'un type donné.
+export async function deleteAlerts(req, res) {
+  const { type, olderThanDays } = req.query;
+
+  // Le type est obligatoire : impossible de tout effacer d'un seul appel
+  if (!type || !ALERT_TYPES.includes(type)) throw badRequest("Type d'alerte invalide ou manquant");
+
+  const filter = { senior: req.senior._id, type, read: true };
+
+  const days = Number(olderThanDays);
+  if (days > 0) filter.createdAt = { $lt: addDays(new Date(), -days) };
+
+  const result = await Alert.deleteMany(filter);
+  res.json({ deleted: result.deletedCount });
+}
+
+// GET /aidant/caregivers/:caregiverId/sos?status=all|unread|read&seniorId=&from=&to=&page=&limit=
+// Historique SOS d'un aidant, identifié par son id (lu dans le token côté client)
+export async function listCaregiverSos(req, res) {
+  const { caregiverId } = req.params;
+  if (!mongoose.isValidObjectId(caregiverId)) throw badRequest("Identifiant aidant invalide");
+
+  // L'id envoyé par le navigateur n'est jamais une preuve : on le compare à celui du token vérifié
+  const isSelf = String(req.user._id) === caregiverId;
+  if (!isSelf && req.user.role !== "admin") {
+    return res.status(403).json({ message: "Accès refusé." });
+  }
+
+  res.json(await sosHistory(caregiverId, req.query));
+}
+
+// GET /aidant/sos — même chose, l'aidant est déduit du token seul
+export async function listMySos(req, res) {
+  res.json(await sosHistory(req.user._id, req.query));
 }
 
 /* ---------- Synthèses ---------- */

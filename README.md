@@ -30,6 +30,7 @@ Ouvrir http://localhost:3000.
 | Senior | reconnaissance faciale | photo du visage enregistrée par l'aidant |
 
 > ⚠️ `npm run seed` **vide** les collections avant de les remplir.
+> 🛡️ Par sécurité, il **refuse de s'exécuter si la base contient déjà des données** (souvenirs, photos et comptes sont conservés). Pour tout effacer volontairement : `npm run seed -- --force`.
 
 ## 2. Configuration (`backend/.env`)
 

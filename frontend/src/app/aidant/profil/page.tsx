@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { Pencil, ScanFace, Phone, Plus, ShieldAlert, Stethoscope, Trash2, UserRound, Users } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, assetUrl } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import type { Contact, Senior } from "@/lib/types";
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, Field, Input, Modal, PageHeader, Spinner, Toggle } from "@/components/ui";
 import { useCurrentSenior } from "../SeniorContext";
 import { fmtRelative } from "@/lib/format";
-import { EditSeniorModal, assetUrl } from "../SeniorForms";
+import { EditSeniorModal } from "../SeniorForms";
 
 export default function ProfilPage() {
   const { senior, base, reload: reloadSeniors } = useCurrentSenior();

@@ -1,7 +1,8 @@
 import { Event, Intake } from "../models/index.js";
 import { badRequest, forbidden, notFound, requireFields } from "../utils/httpError.js";
 import { trackEvent } from "../services/tracking.js";
-import { logBrowserStt, transcribe as whisper } from "../services/ai/stt.js";
+// Reconnaissance vocale : route commune de l'équipe POST /api/senior/stt (senior/senior.controller.js)
+import { logBrowserStt } from "../services/ai/stt.js";
 import { synthesize } from "../services/ai/tts.js";
 import { parseYesNo, toISODate } from "../services/agenda/frenchParser.js";
 import { agendaFor, briefing as buildBriefing, fromISO, speakAgenda, speakDay, speakTime, toSecondPerson, understand } from "../services/agenda/voiceAgenda.js";
@@ -116,16 +117,6 @@ export async function briefing(req, res) {
 }
 
 /* ---------- Voix ---------- */
-
-export async function transcribe(req, res) {
-  try {
-    const out = await whisper(req.body, req.headers["content-type"], req.senior._id);
-    res.json(out);
-  } catch (err) {
-    // 503 : l'interface bascule sur la reconnaissance du navigateur
-    res.status(503).json({ message: err.message, fallback: "webspeech" });
-  }
-}
 
 // Voix naturelle (Edge TTS → Gemini TTS) ; 503 → l'interface utilise la voix du navigateur
 export async function tts(req, res) {
