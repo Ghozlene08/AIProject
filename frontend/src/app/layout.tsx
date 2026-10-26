@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "@fontsource-variable/nunito-sans";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
+import CaregiverCallListener from "./aidant/CaregiverCallListener";
 
 export const metadata: Metadata = {
   title: {
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="fr" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>{children}
+
+        </AuthProvider>
       </body>
     </html>
   );

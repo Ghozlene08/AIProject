@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, Bot, CalendarDays, ChevronLeft, ChevronRight, MapPin, Mic, Pencil, Pill, Plus, Stethoscope, Trash2, Utensils } from "lucide-react";
+import { Activity, BellRing, Bot, CalendarDays, ChevronLeft, ChevronRight, MapPin, Mic, Pencil, Pill, Plus, Stethoscope, Trash2, Utensils } from "lucide-react";
 import { api, qs } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { addDays, endOfDay, fmtShort, fmtTime, startOfDay, toDateInput, toTimeInput } from "@/lib/format";
@@ -14,6 +14,7 @@ const TYPES: Record<EventType, { label: string; icon: typeof CalendarDays; tone:
   rdv: { label: "Rendez-vous", icon: Stethoscope, tone: "brand" },
   repas: { label: "Repas", icon: Utensils, tone: "warn" },
   activite: { label: "Activité", icon: Activity, tone: "violet" },
+  rappel: { label: "Rappel", icon: BellRing, tone: "brand" },
   autre: { label: "Autre", icon: CalendarDays, tone: "muted" },
 };
 

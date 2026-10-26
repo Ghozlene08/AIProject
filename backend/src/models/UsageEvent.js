@@ -18,6 +18,7 @@ export const ACTIONS = [
   "rappel_cree",
   "prise_confirmee",
   "prise_manquee",
+  "appel_manque",
   "document_traite",
   "souvenir_ecoute",
   "souvenir_cree",

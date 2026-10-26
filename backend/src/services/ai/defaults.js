@@ -7,8 +7,9 @@ export const DEFAULT_PROVIDERS = [
   { key: "openrouter", name: "OpenRouter", capability: "llm", model: "google/gemma-4-31b-it:free", role: "secours", priority: 3, envKey: "OPENROUTER_API_KEY", dailyQuota: 200, description: "Second secours du dialogue" },
   { key: "whisper", name: "Whisper (STT)", capability: "stt", model: "whisper-large-v3-turbo", role: "principal", priority: 1, envKey: "GROQ_API_KEY", dailyQuota: 2000, description: "Reconnaissance vocale via Groq" },
   { key: "webspeech", name: "Web Speech API", capability: "stt", model: "navigateur", role: "secours", priority: 2, description: "Reconnaissance vocale du navigateur" },
-  { key: "edgetts", name: "Edge TTS", capability: "tts", model: "fr-FR-DeniseNeural", role: "principal", priority: 1, description: "Synthèse vocale fr-FR" },
-  { key: "browsertts", name: "Synthèse du navigateur", capability: "tts", model: "speechSynthesis", role: "secours", priority: 2, description: "Synthèse vocale de secours" },
+  { key: "edgetts", name: "Edge TTS", capability: "tts", model: "fr-FR-DeniseNeural", role: "principal", priority: 1, description: "Voix naturelle fr-FR (accès non officiel, bloqué par Microsoft au 25/10/2026)" },
+  { key: "geminitts", name: "Gemini TTS", capability: "tts", model: "gemini-3.8-flash-tts", role: "secours", priority: 2, envKey: "GEMINI_API_KEY", dailyQuota: 100, description: "Voix naturelle de secours (API officielle Google)" },
+  { key: "browsertts", name: "Synthèse du navigateur", capability: "tts", model: "speechSynthesis", role: "secours", priority: 3, description: "Dernier secours, exécuté dans le navigateur" },
   { key: "tesseract", name: "Tesseract.js", capability: "ocr", model: "fra", role: "principal", priority: 1, description: "OCR exécuté sur notre serveur" },
 ];
 
@@ -22,6 +23,8 @@ const RETIRED_MODELS = {
 
 // Crée les fournisseurs manquants au démarrage (sans écraser les réglages de l'admin)
 export async function ensureProviders() {
+  // La synthèse du navigateur passe en dernier secours, après Gemini TTS
+  await AiProvider.updateOne({ key: "browsertts", priority: 2 }, { priority: 3 });
   await Promise.all(Object.entries(RETIRED_MODELS).map(([from, to]) => AiProvider.updateMany({ model: from }, { model: to })));
   await AiProvider.bulkWrite(
     DEFAULT_PROVIDERS.map((p) => ({

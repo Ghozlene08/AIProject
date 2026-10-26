@@ -9,7 +9,7 @@ import { fmtShort } from "@/lib/format";
 import type { Role, User } from "@/lib/types";
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, Field, Input, Modal, Select, Spinner } from "@/components/ui";
 
-// Droits de chaque rôle (le senior se connecte par appairage, sans compte e-mail)
+// Droits de chaque rôle (le senior se connecte par reconnaissance faciale, sans compte e-mail)
 const PERMISSIONS: [string, boolean, boolean][] = [
   ["Créer et suivre le profil de ses proches", true, false],
   ["Saisir traitements, contacts et agenda", true, false],
@@ -46,7 +46,7 @@ export function AccountsPanel() {
         <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
           <div className="mr-auto">
             <h2 className="text-[15px] font-bold text-ink">Comptes aidants et administrateurs</h2>
-            <p className="text-xs text-muted">Les seniors se connectent par code d&apos;appairage et PIN, sans compte e-mail</p>
+            <p className="text-xs text-muted">Les seniors se connectent par reconnaissance faciale, sans compte e-mail</p>
           </div>
           <Select aria-label="Rôle" value={role} onChange={(e) => setRole(e.target.value)} className="w-44">
             <option value="">Tous les rôles</option>

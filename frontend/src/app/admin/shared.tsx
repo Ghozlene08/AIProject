@@ -36,7 +36,7 @@ export const ACTION_LABELS: Record<string, string> = {
   interaction_vocale: "Échange avec l'assistant",
   rappel_cree: "Rappel créé",
   prise_confirmee: "Prise de médicament confirmée",
-  prise_manquee: "Prise manquée",
+  appel_manquee: "Appels manqués",
   document_traite: "Document expliqué",
   souvenir_ecoute: "Souvenir écouté",
   appel_proche: "Appel d'un proche",

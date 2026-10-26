@@ -428,7 +428,7 @@ export async function usersStats(days) {
   const [cur, prev, seniors, users, activity, periodActions] = await Promise.all([
     kpisFor(period.from, period.to),
     kpisFor(period.prevFrom, period.prevTo),
-    Senior.find().select("firstName lastName city createdAt caregivers pairedAt").lean(),
+    Senior.find().select("firstName lastName city createdAt caregivers").lean(),
     User.find().select("name role status lastLoginAt createdAt").lean(),
     firstActivityBySenior(period.to),
     UsageEvent.aggregate([

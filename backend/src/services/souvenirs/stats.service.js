@@ -19,7 +19,8 @@ export async function memoryStats(seniorId, days = 7) {
     Memory.countDocuments({ senior: seniorId, source: "senior", createdAt: range }),
   ]);
 
-  const answers = sessions.flatMap((s) => s.answers ?? []);
+  const played = sessions.filter((s) => s.answers?.length); // une partie abandonnée sans réponse ne compte pas
+  const answers = played.flatMap((s) => s.answers ?? []);
   const count = (r) => answers.filter((a) => a.result === r).length;
   const answered = answers.filter((a) => a.result !== "passee").length;
 
@@ -41,7 +42,7 @@ export async function memoryStats(seniorId, days = 7) {
     memories: { total, pending, toldBySenior },
     listened: listenEvents.length,
     quizzes: {
-      played: sessions.length,
+      played: played.length,
       answered,
       withoutHint: count("sans_indice"),
       withHint: count("un_indice") + count("deux_indices"),
@@ -49,5 +50,21 @@ export async function memoryStats(seniorId, days = 7) {
       skipped: count("passee"),
     },
     daily,
+    recentQuizzes: await recentQuizzes(seniorId),
   };
+}
+
+// Détail des 5 dernières parties : question, réponse dite par le senior, résultat
+async function recentQuizzes(seniorId) {
+  const sessions = await QuizSession.find({ senior: seniorId, "answers.0": { $exists: true } })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate("memory", "title")
+    .lean();
+  return sessions.map((s) => ({
+    _id: s._id,
+    memoryTitle: s.memory?.title ?? "Souvenir supprimé",
+    createdAt: s.createdAt,
+    answers: [...s.answers].sort((a, b) => a.questionIndex - b.questionIndex).map((a) => ({ question: a.question, given: a.given, result: a.result })),
+  }));
 }

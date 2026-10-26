@@ -71,7 +71,7 @@ const hash = (p) => bcrypt.hash(p, 10);
 const aidantHash = await hash("Aidant123!");
 const [, sophie, samir] = await User.create([
   { name: "Mariem Sellami", email: "admin@senior-assistant.tn", passwordHash: await hash("Admin123!"), role: "admin", lastLoginAt: now },
-  { name: "Sophie Martin", email: "sophie.martin@exemple.com", passwordHash: aidantHash, role: "aidant", phone: "06 11 22 33 44", lastLoginAt: now, notifications: { email: true, telegram: true, telegramChatId: "000000000" } },
+  { name: "Sophie Martin", email: "sophie.martin@exemple.com", passwordHash: aidantHash, role: "aidant", phone: "06 11 22 33 44", lastLoginAt: now, notifications: { email: true, telegram: false } },
   { name: "Samir Ben Ali", email: "samir@exemple.com", passwordHash: aidantHash, role: "aidant", lastLoginAt: addDays(now, -2) },
   { name: "Leila Khelifi", email: "leila@exemple.com", passwordHash: aidantHash, role: "aidant", status: "inactif", lastLoginAt: addDays(now, -40) },
   { name: "Karim Haddad", email: "karim.admin@senior-assistant.tn", passwordHash: await hash("Admin123!"), role: "admin", lastLoginAt: addDays(now, -3) },
@@ -90,9 +90,6 @@ const marie = await Senior.create({
   doctor: { name: "Dr. Ben Salem", specialty: "Médecin traitant", phone: "71 234 567" },
   medicalNotes: "Hypertension légère. Allergie à la pénicilline.",
   caregivers: [sophie._id],
-  pairingCode: "MARIE7",
-  pinHash: await hash("1234"),
-  pairedAt: addDays(now, -40),
   lastSeenAt: now,
   createdAt: addDays(now, -41),
 });
@@ -160,8 +157,6 @@ for (let i = 0; i < 40; i++) {
       birthDate: new Date(now.getFullYear() - (68 + Math.floor(rand() * 20)), Math.floor(rand() * 12), 1 + Math.floor(rand() * 27)),
       city: weighted(CITIES),
       caregivers: [...new Set(caregivers.map(String))],
-      pairingCode: `DEMO${String(i).padStart(2, "0")}`,
-      pairedAt: profile === "jamais" ? undefined : addDays(now, -createdAgo + 1),
       createdAt: addDays(now, -createdAgo),
     },
   });
@@ -170,7 +165,7 @@ const seniors = await Senior.insertMany(seniorsData.map((s) => s.doc));
 const population = [{ senior: marie, profile: "quotidien", caregivers: [sophie._id] }].concat(
   seniors.map((s, i) => ({ senior: s, profile: seniorsData[i].profile, caregivers: s.caregivers })),
 );
-await Senior.create({ firstName: "Ahmed", lastName: "Ben Ali", birthDate: new Date(now.getFullYear() - 80, 6, 2), city: "Sousse", caregivers: [samir._id], pairingCode: "AHMED8", pinHash: await hash("4321"), createdAt: addDays(now, -2) });
+await Senior.create({ firstName: "Ahmed", lastName: "Ben Ali", birthDate: new Date(now.getFullYear() - 80, 6, 2), city: "Sousse", caregivers: [samir._id], createdAt: addDays(now, -2) });
 
 /* =====================================================================
  * 4. Historique d'usage sur 45 jours (événements, appels IA, prises, alertes)
@@ -366,7 +361,7 @@ console.log(`   ${population.length + 1} seniors, ${aidants.length + 3} aidants,
 console.log("");
 console.log("   Administrateur : admin@senior-assistant.tn / Admin123!");
 console.log("   Aidant         : sophie.martin@exemple.com / Aidant123!");
-console.log("   Senior Marie   : code d'appairage MARIE7, PIN 1234");
+console.log("   Senior Marie   : connexion par reconnaissance faciale (photo à ajouter depuis l'espace aidant)");
 void meds;
 
 await mongoose.disconnect();
