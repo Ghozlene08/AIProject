@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// L'espace senior s'ouvre par la reconnaissance faciale (plus de code PIN)
-export default function SeniorPage() {
+export const metadata = { title: "Connexion Senior" };
+export default function SeniorConnectionPage() {
   redirect("/connexion?espace=senior");
 }

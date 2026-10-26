@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CheckCircle2, HeartHandshake, Plus, ScanFace, Trash2, User, UserPlus } from "lucide-react";
 import { api, assetUrl as backendAssetUrl } from "@/lib/api";
+import { useState } from "react";
+import Link from "next/link";
+import { HeartHandshake, KeyRound, UserPlus } from "lucide-react";
+import { api } from "@/lib/api";
 import type { Senior } from "@/lib/types";
 import { Button, Card, ErrorBox, Field, Input, Modal, Textarea, Toggle } from "@/components/ui";
 import { useSenior } from "./SeniorContext";
@@ -221,6 +225,9 @@ function ProchesFields({ proches, setProches }: { proches: ProcheDraft[]; setPro
       <Button type="button" variant="ghost" onClick={() => setProches([...proches, emptyProche()])}>
         <Plus className="h-4 w-4" /> Ajouter un proche
       </Button>
+      <p className="mt-3 text-xs text-muted">Le PIN ne sera plus affiché : notez-le maintenant.</p>
+      <Link href="/senior/connexion" className="mt-5 flex min-h-16 items-center justify-center gap-3 rounded-2xl bg-brand-700 px-5 text-[22px] font-bold text-white hover:bg-brand-800"><KeyRound className="h-6 w-6" aria-hidden="true" />Connecter le senior</Link>
+      <p className="mt-3 text-base text-ink">Sur l’appareil du senior, ouvrez l’Espace Senior et saisissez ces deux codes.</p>
     </div>
   );
 }

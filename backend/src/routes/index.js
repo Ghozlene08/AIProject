@@ -1,4 +1,5 @@
 import { Router } from "express";
+import assistantRouter from "./assistant.js";
 import mongoose from "mongoose";
 import { loadSenior, requireAuth, requireRole, requireSenior } from "../middlewares/auth.js";
 import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js"; 
@@ -22,6 +23,7 @@ import { uploadDocument } from "../middlewares/documentUpload.js";
 import * as document from "../controllers/document.controller.js";
 import * as callCtrl from "../controllers/call.controller.js";
 const router = Router();
+router.use("/senior", assistantRouter);
 
 router.get("/health", (_req, res) => {
   res.json({ status: "ok", database: mongoose.connection.readyState === 1 ? "connectée" : "déconnectée" });

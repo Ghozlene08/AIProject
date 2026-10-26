@@ -36,5 +36,6 @@
     "socket.io-client": "^4.8.4",
     "tesseract.js": "^7.0.0",
     "twilio": "^6.2.0"
+    "senior-assistant": "file:.."
   }
 }
