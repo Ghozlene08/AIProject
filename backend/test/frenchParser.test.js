@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { detectIntent, extractTitle, parseDate, parseTime, parseYesNo, ruleParse } from "../src/services/agenda/frenchParser.js";
+import { isMedical, nextOccurrence, parseRecurrence, preparationAdvice, speakRepeat } from "../src/services/agenda/frenchParser.js";
 
 const NOW = new Date(2026, 9, 18, 10, 0); // dimanche 18 octobre 2026, 10 h
 
@@ -60,7 +61,7 @@ test("intitulé du rappel sans formule ni horaire", () => {
 
 test("cas de démonstration : rappel à 20 h créé pour aujourd'hui", () => {
   const r = ruleParse("Rappelle-moi de prendre mon médicament à 20h.", NOW);
-  assert.deepEqual(r, { intent: "creer_rappel", date: "2026-10-18", time: "20:00", title: "Prendre mon médicament", type: "rappel" });
+  assert.deepEqual(r, { intent: "creer_rappel", date: "2026-10-18", time: "20:00", title: "Prendre mon médicament", type: "rappel", repeat: null, medical: false });
 });
 
 test("heure passée sans jour : le rappel est pour demain", () => {
@@ -76,4 +77,31 @@ test("oui / non", () => {
   assert.equal(parseYesNo("D'accord"), "oui");
   assert.equal(parseYesNo("Non, annule"), "non");
   assert.equal(parseYesNo("Peut-être"), null);
+});
+
+test("rappels répétés : rythme et jours", () => {
+  assert.deepEqual(parseRecurrence("Rappelle-moi tous les jours à 9 heures de prendre mon médicament"), { freq: "quotidien", weekdays: [] });
+  assert.deepEqual(parseRecurrence("chaque matin à 8h"), { freq: "quotidien", weekdays: [] });
+  assert.deepEqual(parseRecurrence("tous les lundis d'appeler ma fille"), { freq: "hebdomadaire", weekdays: [1] });
+  assert.deepEqual(parseRecurrence("tous les mardis et jeudis à 18h"), { freq: "hebdomadaire", weekdays: [2, 4] });
+  assert.deepEqual(parseRecurrence("toutes les semaines"), { freq: "hebdomadaire", weekdays: null });
+  assert.equal(parseRecurrence("Rappelle-moi lundi d'appeler ma fille"), null);
+  assert.equal(extractTitle("Rappelle-moi tous les lundis d'appeler ma fille à 10 heures"), "Appeler ma fille");
+  assert.equal(speakRepeat({ freq: "hebdomadaire", weekdays: [2, 4] }), "tous les mardis et jeudis");
+});
+
+test("première occurrence d'un rappel répété", () => {
+  const monday9 = new Date(2026, 9, 26, 9, 0); // lundi
+  assert.equal(nextOccurrence({ freq: "quotidien", weekdays: [] }, "08:00", monday9), "2026-10-27");
+  assert.equal(nextOccurrence({ freq: "quotidien", weekdays: [] }, "10:00", monday9), "2026-10-26");
+  assert.equal(nextOccurrence({ freq: "hebdomadaire", weekdays: [4] }, "15:00", monday9), "2026-10-29");
+});
+
+test("santé : détection et conseil pratique (pas de conseil médical)", () => {
+  assert.equal(isMedical("Rendez-vous chez le cardiologue"), true);
+  assert.equal(isMedical("Prise de sang au laboratoire"), true);
+  assert.equal(isMedical("Acheter du pain"), false);
+  assert.match(preparationAdvice("prise de sang vendredi"), /à jeun/);
+  assert.match(preparationAdvice("scanner du genou"), /ordonnance/);
+  assert.equal(preparationAdvice("Arroser les plantes"), null);
 });

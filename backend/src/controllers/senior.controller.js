@@ -4,13 +4,16 @@ import { trackEvent } from "../services/tracking.js";
 // Reconnaissance vocale : route commune de l'équipe POST /api/senior/stt (senior/senior.controller.js)
 import { logBrowserStt } from "../services/ai/stt.js";
 import { synthesize } from "../services/ai/tts.js";
-import { parseYesNo, toISODate } from "../services/agenda/frenchParser.js";
-import { agendaFor, briefing as buildBriefing, fromISO, speakAgenda, speakDay, speakTime, toSecondPerson, understand } from "../services/agenda/voiceAgenda.js";
+import { detectType, isMedical, nextOccurrence, parseYesNo, toISODate } from "../services/agenda/frenchParser.js";
+import { agendaFor, briefing as buildBriefing, fromISO, speakAgenda, speakDay, speakTime, understand } from "../services/agenda/voiceAgenda.js";
+import { createSeries, findSeriesDuplicate, stopSeries } from "../services/agenda/series.js";
+import { adviceFor } from "../services/agenda/advice.js";
+import { caregiverFirstName, notifyMedical } from "../services/agenda/caregiver.js";
+import * as say from "../services/agenda/phrases.js";
+import { speakWeather, todayWeather } from "../services/agenda/weather.js";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-// Formulation orale : minuscule initiale et « mon » → « votre »
-const lowerFirst = (s) => toSecondPerson(s.charAt(0).toLowerCase() + s.slice(1));
 
 // La session du senior est ouverte par la reconnaissance faciale (auth.controller → seniorFaceLogin)
 
@@ -92,7 +95,7 @@ export async function confirmIntake(req, res) {
     const voice = req.body?.channel === "voix";
     trackEvent({ senior: req.senior._id, actor: "senior", module: "agenda", action: "prise_confirmee", channel: voice ? "voix" : "ecran", intent: voice ? "confirmer_prise" : undefined, step: voice ? 4 : undefined });
   }
-  res.json({ intake, speech: `C'est noté, bravo ! Votre ${intake.medication?.name ?? "médicament"} est bien enregistré.` });
+  res.json({ intake, speech: say.intakeConfirmed(intake.medication?.name ?? "médicament") });
 }
 
 function checkProposal(p) {
@@ -110,21 +113,71 @@ async function findDuplicate(seniorId, { title, startAt }) {
   return events.find((e) => sameTitle(e.title.trim(), title.trim())) ?? null;
 }
 
-// Rappel ajouté à l'écran (bouton « + »)
-export async function createEvent(req, res) {
-  const data = checkProposal(req.body);
-  const existing = await findDuplicate(req.senior._id, data);
-  if (existing) return res.json({ event: existing, duplicate: true });
-  const event = await Event.create({ ...data, senior: req.senior._id, createdBy: "senior" });
-  trackEvent({ senior: req.senior._id, actor: "senior", module: "agenda", action: "rappel_cree", channel: "ecran" });
-  res.status(201).json({ event });
+// Répétition envoyée par l'interface : { freq: "quotidien" | "hebdomadaire", weekdays?: [0-6] }
+function checkRepeat(r) {
+  if (!r || typeof r !== "object" || !["quotidien", "hebdomadaire"].includes(r.freq)) return null;
+  const weekdays = Array.isArray(r.weekdays) ? [...new Set(r.weekdays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort() : null;
+  return { freq: r.freq, weekdays: r.freq === "quotidien" ? [] : weekdays?.length ? weekdays : null };
 }
 
-// Le senior peut annuler uniquement les rappels qu'il a lui-même créés
+const whenOf = (p, repeat) => say.whenOf(p, repeat ?? null);
+
+/**
+ * Enregistre un rappel du senior (écran ou voix) : doublons, répétition, conseils pratiques,
+ * et aidant prévenu s'il s'agit de santé. Retourne aussi la phrase dite au senior.
+ */
+async function addReminder(senior, proposal) {
+  const repeat = checkRepeat(proposal.repeat);
+  if (repeat && TIME_RE.test(proposal.time ?? "")) proposal = { ...proposal, date: nextOccurrence(repeat, proposal.time) ?? proposal.date };
+  const data = checkProposal(proposal);
+  const medical = proposal.medical === true || isMedical(data.title);
+  // Ajouté à l'écran : « Rendez-vous chez le dentiste » est un rendez-vous, pas un simple rappel
+  if (data.type === "rappel" && detectType(data.title) === "rdv") data.type = "rdv";
+  const when = whenOf(proposal, repeat);
+
+  // Conseils calculés avant l'enregistrement (le rappel ne se signale pas lui-même comme conflit)
+  const advice = await adviceFor(senior._id, { ...data, medical });
+  let event;
+  let series = null;
+  let duplicate = false;
+  if (repeat) {
+    ({ series, duplicate } = await createSeries(senior, { title: data.title, type: data.type, time: proposal.time, repeat, medical }, data.startAt));
+    event = await Event.findOne({ series: series._id, status: "prevu" }).sort({ startAt: 1 });
+  } else {
+    event = await findDuplicate(senior._id, data);
+    duplicate = Boolean(event);
+    if (!event) event = await Event.create({ ...data, medical, senior: senior._id, createdBy: "senior" });
+  }
+  if (duplicate) return { event, duplicate, speech: say.alreadyThere(data.title, when, data.type) };
+
+  // Santé : l'aidant est prévenu, et le senior le sait (transparence)
+  let notified = null;
+  if (medical) {
+    await notifyMedical(senior, { title: data.title, startAt: data.startAt, type: data.type, series });
+    if (event) await Event.updateOne({ _id: event._id }, { caregiverNotifiedAt: new Date() });
+    notified = await caregiverFirstName(senior);
+  }
+  const speech = say.saved(data, when, { advice, notified });
+  return { event, series, duplicate, advice, notified, speech };
+}
+
+// Rappel ajouté à l'écran (bouton « + »)
+export async function createEvent(req, res) {
+  const out = await addReminder(req.senior, req.body ?? {});
+  if (!out.duplicate) trackEvent({ senior: req.senior._id, actor: "senior", module: "agenda", action: "rappel_cree", channel: "ecran" });
+  res.status(out.duplicate ? 200 : 201).json({ event: out.event, duplicate: out.duplicate, repeat: Boolean(out.series), notified: out.notified ?? null, speech: out.speech });
+}
+
+// Le senior peut annuler uniquement les rappels qu'il a lui-même créés.
+// Pour un rappel répété, la répétition entière est arrêtée.
 export async function cancelEvent(req, res) {
   const event = await Event.findOne({ _id: req.params.id, senior: req.senior._id }).catch(() => null);
   if (!event) throw notFound("Rappel introuvable");
   if (event.createdBy !== "senior") throw forbidden("Ce rendez-vous a été ajouté par votre proche");
+  if (event.series) {
+    await stopSeries(event.series, req.senior._id);
+    return res.json({ ok: true, stopped: true });
+  }
   event.status = "annule";
   await event.save();
   res.json({ ok: true });
@@ -155,7 +208,7 @@ export async function dueReminders(req, res) {
           time: hhmm(i.scheduledAt),
           title: "C'est l'heure de votre médicament",
           detail: med,
-          speech: `Il est ${speakTime(hhmm(new Date()))}. C'est l'heure de prendre votre ${med}.${i.medication?.instructions ? ` ${i.medication.instructions}.` : ""} Dites « je l'ai pris » quand c'est fait.`,
+          speech: say.intakeReminder(hhmm(new Date()), med, i.medication?.instructions),
         };
       }),
       ...events.map((e) => ({
@@ -164,7 +217,7 @@ export async function dueReminders(req, res) {
         time: hhmm(e.startAt),
         title: e.type === "rdv" ? "Rendez-vous" : "Petit rappel",
         detail: e.title,
-        speech: e.type === "rdv" ? `Rappel : ${lowerFirst(e.title)}${e.location ? `, ${e.location.replace(/\s+[—–-]\s+/g, ", ")}` : ""}, à ${speakTime(hhmm(e.startAt))}.` : `Vous m'avez demandé de vous rappeler : ${lowerFirst(e.title)}.`,
+        speech: say.eventReminder(e, hhmm(e.startAt), e.location?.replace(/s+[—–-]s+/g, ", ")),
       })),
     ],
   });
@@ -190,14 +243,7 @@ export async function tts(req, res) {
   }
 }
 
-const isInfinitive = (title) => /^[a-zàâäéèêëîïôöùûüç'-]+(er|ir|re|oir)\b/i.test(title.trim());
-
-function proposalSpeech(p) {
-  const when = `${speakDay(p.date)} à ${speakTime(p.time)}`;
-  return p.type !== "rdv" && isInfinitive(p.title)
-    ? `Je vous rappellerai ${/^[aeéèêiouyh]/i.test(p.title) ? "d'" : "de "}${lowerFirst(p.title)} ${when}. C'est bien cela ?`
-    : `Je note : ${lowerFirst(p.title)}, ${when}. C'est bien cela ?`;
-}
+const proposalSpeech = (p) => say.proposal(p);
 
 export async function voiceAgenda(req, res) {
   const started = Date.now();
@@ -205,6 +251,13 @@ export async function voiceAgenda(req, res) {
   const text = String(req.body.text).slice(0, 500);
   const context = req.body.context ?? null;
   if (req.body.stt === "webspeech") logBrowserStt(req.senior._id);
+
+  // « Quel temps fait-il ? » : réponse directe (Open-Meteo), sans passer par le LLM
+  if (!context && /(quel temps|la meteo|météo|va-t-il pleuvoir|il va pleuvoir|fait-il (beau|froid|chaud)|il fait (beau|froid|chaud)|parapluie)/i.test(text)) {
+    const weather = speakWeather(await todayWeather(req.senior.city));
+    trackEvent({ senior: req.senior._id, actor: "senior", channel: "voix", module: "assistant", action: "interaction_vocale", intent: "meteo", step: 4, outcome: weather ? "reussi" : "echec", latencyMs: Date.now() - started });
+    return res.json({ status: "answer", intent: "meteo", speech: weather || "Je n'arrive pas à connaître la météo pour le moment. Réessayez un peu plus tard." });
+  }
 
   const r = await understand(text, req.senior, context);
   const latency = () => Date.now() - started;
@@ -223,31 +276,36 @@ export async function voiceAgenda(req, res) {
       .populate("medication", "name dosage");
     if (!intake) {
       track({ module: "agenda", action: "prise_confirmee", intent: "confirmer_prise", step: 2, outcome: "echec", failureReason: "aucune_prise_due" });
-      return res.json({ status: "answer", intent: r.intent, speech: "Je ne vois pas de médicament à prendre en ce moment. Votre agenda est à jour." });
+      return res.json({ status: "answer", intent: r.intent, speech: say.noIntakeDue() });
     }
     intake.status = "confirme";
     intake.confirmedAt = new Date();
     await intake.save();
     track({ module: "agenda", action: "prise_confirmee", intent: "confirmer_prise", step: 4, outcome: "reussi" });
-    return res.json({ status: "answer", intent: r.intent, speech: `C'est noté, bravo ! Votre ${intake.medication?.name ?? "médicament"} est bien enregistré.`, source: r.source });
+    return res.json({ status: "answer", intent: r.intent, speech: say.intakeConfirmed(intake.medication?.name ?? "médicament"), source: r.source });
   }
 
   if (r.intent === "creer_rappel") {
-    const pending = { title: r.title, date: r.date, type: r.type };
+    const pending = { title: r.title, date: r.date, type: r.type, repeat: r.repeat, medical: r.medical };
+    // Rappel répété : la première occurrence est la prochaine à venir
+    if (r.repeat && r.time) r.date = nextOccurrence(r.repeat, r.time) ?? r.date;
     if (!r.time) {
       if (context) {
         // Deuxième tentative sans heure compréhensible : on abandonne poliment
         track({ module: "agenda", action: "rappel_cree", intent: "creer_rappel", step: 2, outcome: "echec", failureReason: "horaire_non_identifie" });
-        return res.json({ status: "answer", intent: r.intent, speech: "Je n'ai pas bien compris l'heure. Vous pouvez recommencer, par exemple : « Rappelle-moi d'appeler ma fille demain à 10 heures »." });
+        return res.json({ status: "answer", intent: r.intent, speech: say.timeNotUnderstood() });
       }
-      return res.json({ status: "clarification", intent: r.intent, context: pending, speech: "À quelle heure voulez-vous que je vous le rappelle ?", source: r.source });
+      return res.json({ status: "clarification", intent: r.intent, context: pending, speech: say.askTime(), source: r.source });
     }
     if (fromISO(r.date, r.time) < new Date(Date.now() - 60000)) {
-      return res.json({ status: "clarification", intent: r.intent, context: pending, speech: `${speakTime(r.time).charAt(0).toUpperCase() + speakTime(r.time).slice(1)}, c'est déjà passé. À quelle heure voulez-vous ce rappel ?` });
+      return res.json({ status: "clarification", intent: r.intent, context: pending, speech: say.timePassed(r.time) });
     }
-    const proposal = { title: r.title, date: r.date, time: r.time, type: r.type };
-    if (await findDuplicate(req.senior._id, { title: r.title, startAt: fromISO(r.date, r.time) })) {
-      return res.json({ status: "answer", intent: r.intent, speech: `C'est déjà dans votre agenda : ${lowerFirst(r.title)}, ${speakDay(r.date)} à ${speakTime(r.time)}. Je vous le rappellerai.`, source: r.source });
+    const proposal = { title: r.title, date: r.date, time: r.time, type: r.type, repeat: r.repeat, medical: r.medical };
+    const duplicate = r.repeat
+      ? await findSeriesDuplicate(req.senior._id, { title: r.title, time: r.time, freq: r.repeat.freq, weekdays: r.repeat.freq === "quotidien" ? [] : (r.repeat.weekdays ?? [fromISO(r.date).getDay()]) })
+      : await findDuplicate(req.senior._id, { title: r.title, startAt: fromISO(r.date, r.time) });
+    if (duplicate) {
+      return res.json({ status: "answer", intent: r.intent, speech: say.alreadyThere(r.title, whenOf(r, r.repeat), r.type), source: r.source });
     }
     return res.json({ status: "confirmation", intent: r.intent, proposal, speech: proposalSpeech(proposal), source: r.source });
   }
@@ -256,7 +314,7 @@ export async function voiceAgenda(req, res) {
   res.json({
     status: "answer",
     intent: "autre",
-    speech: "Je peux vous aider avec votre agenda. Dites par exemple : « Qu'ai-je prévu aujourd'hui ? » ou « Rappelle-moi de prendre mon médicament à 20 heures ».",
+    speech: say.notUnderstood(),
   });
 }
 
@@ -268,20 +326,19 @@ export async function voiceConfirm(req, res) {
   const track = (e) => trackEvent({ senior: req.senior._id, actor: "senior", module: "agenda", action: "rappel_cree", channel: "voix", intent: "creer_rappel", latencyMs: Date.now() - started, ...e });
 
   if (!answer) {
-    return res.json({ status: "confirmation", proposal, speech: "Excusez-moi, je n'ai pas compris. Dites « oui » pour confirmer, ou « non » pour annuler." });
+    return res.json({ status: "confirmation", proposal, speech: say.yesNoAgain() });
   }
   if (answer === "non") {
     track({ step: 3, outcome: "abandon" });
-    return res.json({ status: "answer", speech: "D'accord, j'annule. Vous pouvez me redemander quand vous voulez." });
+    return res.json({ status: "answer", speech: say.cancelled() });
   }
-  const data = checkProposal(proposal);
-  // « Oui » répété (double envoi, réseau lent) : on ne crée pas deux fois le même rappel
-  const event = (await findDuplicate(req.senior._id, data)) ?? (await Event.create({ ...data, senior: req.senior._id, createdBy: "senior" }));
+  // « Oui » répété (double envoi, réseau lent) : addReminder ne crée pas deux fois le même rappel
+  const out = await addReminder(req.senior, proposal ?? {});
   track({ step: 4, outcome: "reussi" });
-  const when = `${speakDay(proposal.date)} à ${speakTime(proposal.time)}`;
-  res.status(201).json({
+  res.status(out.duplicate ? 200 : 201).json({
     status: "answer",
-    event,
-    speech: data.type === "rdv" ? `C'est noté dans votre agenda : ${lowerFirst(data.title)}, ${when}.` : `D'accord, je vous le rappellerai ${when}.`,
+    event: out.event,
+    notified: out.notified ?? null,
+    speech: out.duplicate ? "C'est bien noté, ne vous inquiétez pas." : out.speech,
   });
 }

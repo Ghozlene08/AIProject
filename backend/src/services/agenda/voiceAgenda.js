@@ -1,6 +1,8 @@
 import { Contact, Event, Intake } from "../../models/index.js";
 import { generateText } from "../ai/gateway.js";
-import { normalize, parseDate, parseTime, ruleParse, toISODate } from "./frenchParser.js";
+import { isMedical, normalize, parseDate, parseRecurrence, parseTime, preparationAdvice, ruleParse, toISODate } from "./frenchParser.js";
+import { repeatLabel } from "./series.js";
+import { speakWeather, todayWeather } from "./weather.js";
 
 /*
  * Module F2 — Agenda et rappels proactifs.
@@ -43,6 +45,8 @@ export function speakDay(iso, now = new Date()) {
   if (diff === 1) return "demain";
   if (diff === 2) return "après-demain";
   if (diff === -1) return "hier";
+  // Dans la semaine : « jeudi » suffit (c'est ainsi qu'on parle) ; au-delà, la date complète
+  if (diff > 2 && diff < 7) return WEEKDAYS[d.getDay()];
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${d.toLocaleDateString("fr-FR", { month: "long" })}`;
 }
 
@@ -59,6 +63,22 @@ export function toSecondPerson(text) {
     .replace(/\bmoi\b/gi, "vous");
 }
 
+export const isInfinitive = (title) => /^[a-zàâäéèêëîïôöùûüç'-]+(er|ir|re|oir)\b/i.test(String(title ?? "").trim());
+
+/**
+ * Un rendez-vous dit comme une personne le dirait :
+ * « Aller chez le cardiologue » → « votre rendez-vous chez le cardiologue »,
+ * « Rendez-vous dentiste » → « votre rendez-vous dentiste », sinon l'intitulé tel quel.
+ */
+export function rdvPhrase(title) {
+  const t = toSecondPerson(lowerFirst(String(title ?? ""))).trim();
+  const go = t.match(/^(?:aller|se rendre|passer)\s+((?:chez|à|au|aux)\s.+)$/i);
+  if (go) return `votre rendez-vous ${go[1]}`;
+  const rdv = t.match(/^(?:un |le |mon |votre )?(?:rendez-vous|rdv)\b\s*(.*)$/i);
+  if (rdv) return `votre rendez-vous${rdv[1] ? ` ${rdv[1]}` : ""}`;
+  return t;
+}
+
 // Lieu lisible à voix haute (les tirets longs sont mal prononcés)
 const speakPlace = (s) => lowerFirst(String(s).replace(/\s+[—–-]\s+/g, ", "));
 
@@ -68,7 +88,7 @@ export async function agendaFor(seniorId, day) {
   const range = { $gte: startOfDay(day), $lte: endOfDay(day) };
   const [intakes, events] = await Promise.all([
     Intake.find({ senior: seniorId, scheduledAt: range }).populate("medication", "name dosage posology instructions").sort({ scheduledAt: 1 }),
-    Event.find({ senior: seniorId, startAt: range, status: { $ne: "annule" } }).sort({ startAt: 1 }),
+    Event.find({ senior: seniorId, startAt: range, status: { $ne: "annule" } }).populate("series", "freq weekdays").sort({ startAt: 1 }),
   ]);
   return [
     ...intakes.map((i) => ({
@@ -91,6 +111,9 @@ export async function agendaFor(seniorId, day) {
       note: e.notes ?? null,
       type: e.type,
       createdBy: e.createdBy,
+      // Rappel répété : « tous les lundis » (supprimer l'occurrence arrête la répétition)
+      repeat: repeatLabel(e.series),
+      medical: e.medical,
       status: e.status === "fait" ? "fait" : "prevu",
     })),
   ].sort((a, b) => a.at - b.at);
@@ -107,10 +130,12 @@ export function speakAgenda(items, iso, now = new Date()) {
       const state = it.status === "confirme" ? " : c'est déjà fait" : it.status === "manque" ? " : cette prise n'a pas été confirmée" : "";
       return `${when}, votre ${it.detail || "médicament"}${state}.`;
     }
-    return `${when}, ${lowerFirst(toSecondPerson(it.title))}${it.detail ? `, ${speakPlace(it.detail)}` : ""}.`;
+    // « votre rendez-vous chez le dentiste », « pensez à appeler votre fille »
+    const what = it.type === "rdv" || /^(rendez-vous|rdv)\b/i.test(it.title) ? rdvPhrase(it.title) : isInfinitive(it.title) ? `pensez à ${lowerFirst(toSecondPerson(it.title))}` : lowerFirst(toSecondPerson(it.title));
+    return `${when}, ${what}${it.detail ? `, ${speakPlace(it.detail)}` : ""}.`;
   });
   const n = items.length;
-  return `${dayCap}, vous avez ${n === 1 ? "une chose" : `${n} choses`} de prévue${n > 1 ? "s" : ""}. ${parts.join(" ")}`;
+  return `${dayCap}, vous avez ${n === 1 ? "une seule chose" : `${n} choses`} de prévue${n > 1 ? "s" : ""}. ${parts.join(" ")}`;
 }
 
 /* ---------- Compréhension de la demande ---------- */
@@ -128,7 +153,7 @@ function validLlm(obj, now) {
   }
   const title = typeof obj.title === "string" && obj.title.trim() ? obj.title.trim().slice(0, 80) : null;
   const type = TYPES.includes(obj.type) ? obj.type : "rappel";
-  return { intent, date, time, title, type };
+  return { intent, date, time, title, type, medical: obj.medical === true };
 }
 
 function parseJsonObject(text) {
@@ -157,7 +182,8 @@ export async function understand(text, senior, context = null, now = new Date())
     "Tu analyses une phrase dite par une personne âgée à son assistant d'agenda.",
     `Nous sommes le ${today}, il est ${hhmmOf(now)}.`,
     "Réponds UNIQUEMENT par un objet JSON :",
-    '{"intent":"consulter_agenda|creer_rappel|confirmer_prise|autre","date":"AAAA-MM-JJ ou null","time":"HH:MM ou null","title":"intitulé court à l\'infinitif, ex. Prendre mon médicament, ou null","type":"rappel|rdv|repas"}',
+    '{"intent":"consulter_agenda|creer_rappel|confirmer_prise|autre","date":"AAAA-MM-JJ ou null","time":"HH:MM ou null","title":"intitulé court à l\'infinitif, ex. Prendre mon médicament, ou null","type":"rappel|rdv|repas","medical":true|false}',
+    "- medical : true si c'est un rendez-vous ou un rappel lié à la santé (médecin, examen, soins, hôpital…).",
     "- consulter_agenda : la personne demande ce qui est prévu (date = jour demandé, aujourd'hui par défaut).",
     "- creer_rappel : elle veut un rappel ou noter un rendez-vous.",
     "- confirmer_prise : elle dit avoir pris son médicament.",
@@ -197,6 +223,9 @@ export async function understand(text, senior, context = null, now = new Date())
     time: saidTime?.time ?? (hasTimeWords(text) ? base.time : null),
     title: base.title ?? rules.title,
     type: base.type ?? rules.type,
+    // Répétition : uniquement si elle est dite explicitement (règles, pas d'invention possible)
+    repeat: parseRecurrence(text),
+    medical: rules.medical || llm?.medical === true,
     source,
   };
 
@@ -206,6 +235,8 @@ export async function understand(text, senior, context = null, now = new Date())
     result.title = context.title;
     result.type = context.type ?? result.type;
     result.date = saidTime?.date ?? saidDate ?? context.date ?? result.date;
+    result.repeat = result.repeat ?? context.repeat ?? null;
+    result.medical = Boolean(context.medical) || isMedical(context.title);
   }
   // Heure sans jour : aujourd'hui si elle est encore à venir, sinon demain
   if (result.intent === "creer_rappel" && result.time && !result.date) {
@@ -245,6 +276,12 @@ export async function briefing(senior, now = new Date()) {
   if (upcoming.length) parts.push(`Voici la suite de votre journée : ${upcoming.map(speakItem).join(" ; ")}.`);
   else parts.push("Vous n'avez plus rien de prévu aujourd'hui.");
   if (taken) parts.push(`Vous avez déjà pris ${taken === 1 ? "un médicament" : `${taken} médicaments`} aujourd'hui, bravo.`);
+  // Rendez-vous de santé aujourd'hui : conseil de préparation (règles, pas de conseil médical)
+  const prep = upcoming.find((i) => i.kind === "evenement" && (i.medical || isMedical(i.title)) && preparationAdvice(i.title));
+  if (prep) parts.push(`Pour ${lowerFirst(toSecondPerson(prep.title))} : ${lowerFirst(preparationAdvice(prep.title))}`);
+  // Météo du jour (Open-Meteo, seule la ville est envoyée)
+  const weather = speakWeather(await todayWeather(senior.city), { goingOut: upcoming.some((i) => i.kind === "evenement") });
+  if (weather) parts.push(weather);
   if (missed.length) parts.push(`${missed.map((m) => `Votre ${m.detail} de ${speakTime(m.time)}`).join(" et ")} n'${missed.length > 1 ? "ont" : "a"} pas été confirmé${missed.length > 1 ? "s" : ""}.`);
   const facts = parts.join(" ");
 

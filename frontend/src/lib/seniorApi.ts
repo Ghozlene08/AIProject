@@ -60,6 +60,9 @@ export interface AgendaItem {
   note: string | null;
   type?: "rdv" | "repas" | "activite" | "rappel" | "autre";
   createdBy?: "aidant" | "senior" | "ia";
+  /** Rappel répété : « tous les lundis » */
+  repeat?: string | null;
+  medical?: boolean;
   status: "a_venir" | "confirme" | "manque" | "prevu" | "fait";
 }
 

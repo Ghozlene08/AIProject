@@ -3,6 +3,9 @@ import { addDays, atTime, startOfDay, timeFr } from "../utils/dates.js";
 import { raiseAlert } from "./notifier.js";
 import { trackEvent } from "./tracking.js";
 import { purgeOldLogs } from "./retention.js";
+import { ensureAllOccurrences } from "./agenda/series.js";
+import { runEveningTasks } from "./agenda/caregiver.js";
+import { startTelegramBot } from "./telegramBot.js";
 
 const REMINDER_EVERY_MIN = 15; // un rappel au senior toutes les 15 minutes
 const MAX_REMINDERS = 2; // « non confirmé deux fois » → prise manquée
@@ -31,6 +34,8 @@ export async function removeFutureIntakes(medId) {
 export async function tick() {
   const meds = await Medication.find({ active: true });
   for (const med of meds) await ensureIntakesForMedication(med);
+  // Rappels répétés du senior : occurrences d'aujourd'hui et de demain (module F2)
+  await ensureAllOccurrences();
 
   const now = Date.now();
   const pending = await Intake.find({ status: "a_venir", scheduledAt: { $lte: new Date(now) } }).populate("medication");
@@ -60,7 +65,11 @@ export async function tick() {
 }
 
 export function startScheduler(intervalMs = 60_000) {
-  const run = () => tick().catch((err) => console.error("❌ Planificateur :", err.message));
+  const run = () =>
+    tick()
+      // Résumé du soir et oublis répétés, envoyés à l'aidant (module F2)
+      .then(() => runEveningTasks())
+      .catch((err) => console.error("❌ Planificateur :", err.message));
   const purge = () => purgeOldLogs().catch((err) => console.error("❌ Purge des journaux :", err.message));
   run();
   purge();
@@ -68,5 +77,6 @@ export function startScheduler(intervalMs = 60_000) {
   setInterval(purge, 6 * 3600 * 1000).unref(); // durée de conservation des journaux
   timer.unref();
   console.log("⏰ Planificateur démarré (rappels et prises manquées)");
+  startTelegramBot(); // liaison des comptes Telegram des aidants (si TELEGRAM_BOT_TOKEN est configuré)
   return timer;
 }

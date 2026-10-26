@@ -37,7 +37,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
   const { listen, stop, release, level, interim } = useVoiceCapture();
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", text: "Je vous écoute. Dites par exemple : « Rappelle-moi d'appeler ma fille demain à 10 heures »." },
+    { role: "assistant", text: "Je vous écoute. Que puis-je noter pour vous ?" },
   ]);
   const [pending, setPending] = useState<Pending>(null);
   const [typing, setTyping] = useState(false);
@@ -137,7 +137,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
     setPhase("thinking");
     const result = await transcribe(capture);
     if (!result) {
-      const text = "Je n'ai pas bien entendu. Appuyez sur le micro et parlez un peu plus fort.";
+      const text = "Je ne vous ai pas bien entendu. Appuyez sur le micro, et parlez tranquillement.";
       say(text);
       setPhase("speaking");
       await speak(text);
@@ -214,7 +214,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
             key={i}
             className={cx(
               "max-w-[85%] rounded-3xl px-5 py-4 text-[22px] leading-snug",
-              m.role === "assistant" ? "rounded-bl-md bg-white text-ink shadow-card" : "ml-auto rounded-br-md bg-brand-800 text-white",
+              m.role === "assistant" ? "rounded-bl-md bg-white text-ink shadow-card" : "ml-auto rounded-br-md bg-brand-600 text-white",
             )}
           >
             {m.text}
@@ -227,7 +227,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
       <div className="mx-auto w-full max-w-2xl px-4 pb-6">
         {pending?.kind === "confirmation" && (
           <div className="mb-4 grid grid-cols-2 gap-3">
-            <button onClick={() => answer(true)} className="flex min-h-20 items-center justify-center gap-2 rounded-3xl bg-ok-700 text-[26px] font-extrabold text-white hover:brightness-90">
+            <button onClick={() => answer(true)} className="flex min-h-20 items-center justify-center gap-2 rounded-3xl bg-ok-600 text-[26px] font-extrabold text-white hover:brightness-90">
               <Check className="h-8 w-8" strokeWidth={3} /> Oui, c&apos;est ça
             </button>
             <button onClick={() => answer(false)} className="flex min-h-20 items-center justify-center gap-2 rounded-3xl border-2 border-line bg-white text-[26px] font-extrabold text-ink hover:bg-canvas">
@@ -262,7 +262,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
               aria-label="Écrire votre demande"
               className="h-16 min-w-0 flex-1 rounded-2xl border-2 border-line bg-white px-4 text-[22px] text-ink focus:border-brand-400 focus:outline-none"
             />
-            <button className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-white" aria-label="Envoyer">
+            <button className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white" aria-label="Envoyer">
               <Send className="h-7 w-7" />
             </button>
           </form>

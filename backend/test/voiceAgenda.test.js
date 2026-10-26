@@ -20,7 +20,8 @@ test("jours relatifs puis date complète", () => {
   assert.equal(speakDay("2026-10-27", NOW), "demain");
   assert.equal(speakDay("2026-10-28", NOW), "après-demain");
   assert.equal(speakDay("2026-10-25", NOW), "hier");
-  assert.equal(speakDay("2026-10-29", NOW), "jeudi 29 octobre");
+  assert.equal(speakDay("2026-10-29", NOW), "jeudi");
+  assert.equal(speakDay("2026-11-03", NOW), "mardi 3 novembre");
 });
 
 test("l'assistant répond à la deuxième personne", () => {
@@ -46,11 +47,12 @@ test("journée chargée : chaque élément avec son heure et son état", () => {
   assert.match(text, /À 8 heures et demie, votre Paracétamol 1 g : c'est déjà fait\./);
   assert.match(text, /À midi, votre Vitamine D : cette prise n'a pas été confirmée\./);
   // Le tiret long d'un lieu est remplacé par une virgule (mieux prononcé)
-  assert.match(text, /À 14 heures, rendez-vous médical, cabinet Dr\. Ben Salem, Cardiologie\./);
-  assert.match(text, /À 18 heures, appeler votre fille\./);
+  assert.match(text, /À 14 heures, votre rendez-vous médical, cabinet Dr\. Ben Salem, Cardiologie\./);
+  // Un rappel est formulé comme on le dirait : « pensez à… »
+  assert.match(text, /À 18 heures, pensez à appeler votre fille\./);
 });
 
 test("un seul élément : accord au singulier", () => {
   const text = speakAgenda([{ kind: "evenement", time: "10:00", title: "Atelier mémoire", detail: null, status: "prevu" }], "2026-10-26", NOW);
-  assert.match(text, /^Aujourd'hui, vous avez une chose de prévue\./);
+  assert.match(text, /^Aujourd'hui, vous avez une seule chose de prévue\./);
 });

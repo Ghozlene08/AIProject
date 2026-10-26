@@ -71,7 +71,7 @@ const hash = (p) => bcrypt.hash(p, 10);
 const aidantHash = await hash("Aidant123!");
 const [, sophie, samir] = await User.create([
   { name: "Mariem Sellami", email: "admin@senior-assistant.tn", passwordHash: await hash("Admin123!"), role: "admin", lastLoginAt: now },
-  { name: "Sophie Martin", email: "sophie.martin@exemple.com", passwordHash: aidantHash, role: "aidant", phone: "06 11 22 33 44", lastLoginAt: now, notifications: { email: true, telegram: true, telegramChatId: "000000000" } },
+  { name: "Sophie Martin", email: "sophie.martin@exemple.com", passwordHash: aidantHash, role: "aidant", phone: "06 11 22 33 44", lastLoginAt: now, notifications: { email: true, telegram: false } },
   { name: "Samir Ben Ali", email: "samir@exemple.com", passwordHash: aidantHash, role: "aidant", lastLoginAt: addDays(now, -2) },
   { name: "Leila Khelifi", email: "leila@exemple.com", passwordHash: aidantHash, role: "aidant", status: "inactif", lastLoginAt: addDays(now, -40) },
   { name: "Karim Haddad", email: "karim.admin@senior-assistant.tn", passwordHash: await hash("Admin123!"), role: "admin", lastLoginAt: addDays(now, -3) },

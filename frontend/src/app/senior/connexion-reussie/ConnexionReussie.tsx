@@ -155,7 +155,7 @@ export interface SeniorAccueilData {
 const DEMO: SeniorAccueilData = {
   firstName: "Marie",
   lastName: "Dupont",
-  prochainePrise: { medicament: "Paracétamol 1 g", heure: "08:30" },
+  prochainePrise: null, // la prochaine prise réelle vient de l'API (jamais de valeur fictive)
 };
 
 /* Contacts à appeler (à remplacer par les vrais contacts du senior) */
@@ -350,35 +350,37 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
 
   // Vraies données du senior (API de l'espace Senior) : proches saisis par l'aidant et prochaine prise
   const [contacts, setContacts] = useState<CallContact[]>(CONTACTS);
-  // undefined : chargement en cours ; "demo" : aucune session (données de démonstration)
-  const [nextIntake, setNextIntake] = useState<NextIntake | null | undefined | "demo">(undefined);
+  // Prochaine prise réelle uniquement : sans session ou sans prise, la carte n'est pas affichée
+  const [nextIntake, setNextIntake] = useState<NextIntake | null>(null);
+  const loadNextIntake = () =>
+    seniorApi
+      .get<{ next: NextIntake | null }>("/medications")
+      .then((r) => setNextIntake(r.next))
+      .catch(() => setNextIntake(null));
   useEffect(() => {
-    if (!seniorToken.get()) {
-      const t = window.setTimeout(() => setNextIntake("demo"), 0);
-      return () => window.clearTimeout(t);
-    }
+    if (!seniorToken.get()) return;
     seniorApi
       .get<{ contacts: SeniorContact[] }>("/contacts")
       .then((r) => r.contacts.length && setContacts(r.contacts))
       .catch(() => {});
-    seniorApi
-      .get<{ next: NextIntake | null }>("/medications")
-      .then((r) => setNextIntake(r.next))
-      .catch(() => {});
+    loadNextIntake();
   }, []);
-  const prochainePrise = nextIntake === "demo" ? data.prochainePrise : nextIntake ? { medicament: nextIntake.name, heure: nextIntake.time } : null;
+  const prochainePrise = nextIntake ? { medicament: nextIntake.name, heure: nextIntake.time, late: nextIntake.late } : null;
 
   async function confirmPrise() {
-    if (nextIntake && nextIntake !== "demo") {
-      try {
-        const res = await seniorApi.post<{ speech: string }>(`/intakes/${nextIntake.id}/confirm`);
-        speak(res.speech);
-      } catch (err) {
-        if (err instanceof SeniorApiError) speak(err.message);
-        return;
-      }
+    if (!nextIntake) return;
+    try {
+      const res = await seniorApi.post<{ speech: string }>(`/intakes/${nextIntake.id}/confirm`);
+      speak(res.speech);
+    } catch (err) {
+      if (err instanceof SeniorApiError) speak(err.message);
+      return;
     }
     setPriseConfirmee(true);
+    // Après un court « Prise confirmée », la carte passe à la prise suivante
+    window.setTimeout(() => {
+      loadNextIntake().finally(() => setPriseConfirmee(false));
+    }, 2500);
   }
 
   // Appel vocal vers l'aidant (WebRTC)
@@ -799,8 +801,9 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
               <div className="min-w-0 flex-1">
                 <p className="text-lg font-bold text-muted">Prochaine prise</p>
                 <p className="text-[24px] font-extrabold text-ink">{prochainePrise.medicament}</p>
-                <p className="mt-0.5 flex items-center gap-2 text-lg font-semibold text-ok-600">
-                  <Clock className="h-5 w-5" aria-hidden="true" /> Aujourd&apos;hui à {prochainePrise.heure}
+                <p className={cx("mt-0.5 flex items-center gap-2 text-lg font-semibold", prochainePrise.late ? "text-warn-600" : "text-ok-600")}>
+                  <Clock className="h-5 w-5" aria-hidden="true" />
+                  {prochainePrise.late ? `Prévue à ${prochainePrise.heure.replace(":", "h")}, pas encore confirmée` : `Aujourd'hui à ${prochainePrise.heure.replace(":", "h")}`}
                 </p>
               </div>
               <button

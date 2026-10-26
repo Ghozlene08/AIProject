@@ -115,8 +115,47 @@ export function detectType(text) {
   return "rappel";
 }
 
+/**
+ * Répétition demandée : « tous les jours », « chaque matin », « tous les lundis et jeudis »,
+ * « toutes les semaines » → { freq: "quotidien" } | { freq: "hebdomadaire", weekdays: [0-6] | null } | null
+ * (weekdays null : le jour de la première occurrence)
+ */
+export function parseRecurrence(text) {
+  const s = normalize(text);
+  if (/\b(tous les (jours|matins|soirs|midis)|chaque (jour|matin|soir|midi)|quotidiennement|toute la semaine)\b/.test(s)) return { freq: "quotidien", weekdays: [] };
+  const weekly = s.match(/\b(?:tous les|chaque)\s+((?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)s?(?:\s*(?:,|et)\s*(?:les\s+)?(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)s?)*)/);
+  if (weekly) {
+    const days = [...weekly[1].matchAll(/(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)/g)].map((m) => WEEKDAYS.indexOf(m[1]));
+    return { freq: "hebdomadaire", weekdays: [...new Set(days)].sort() };
+  }
+  if (/\b(toutes les semaines|chaque semaine|une fois par semaine)\b/.test(s)) return { freq: "hebdomadaire", weekdays: null };
+  return null;
+}
+
+/** Rendez-vous ou rappel lié à la santé : l'aidant en est prévenu */
+export function isMedical(text) {
+  return /(medecin|docteur|\bdr\b|dentiste|\bkine|cardiolog|ophtalm|dermato|gyneco|pediatre|neurolog|rhumato|\borl\b|generaliste|specialiste|infirmi|consultation|hopital|clinique|urgences|analyse|prise de sang|bilan|\bradio\b|radiolog|scanner|\birm\b|echograph|mammograph|vaccin|laboratoire|\blabo\b|ordonnance|operation|chirurg|dialyse|seance de reeducation)/.test(
+    normalize(text),
+  );
+}
+
+/** Conseil pratique (non médical) avant un rendez-vous de santé, ou null */
+export function preparationAdvice(text) {
+  const s = normalize(text);
+  if (/(prise de sang|bilan sanguin|analyses? de sang|glycemie|laboratoire|\blabo\b)/.test(s)) return "Demandez au laboratoire si vous devez venir à jeun.";
+  if (/(\bradio\b|radiolog|scanner|\birm\b|echograph|mammograph)/.test(s)) return "Pensez à emporter votre ordonnance et vos anciens examens.";
+  if (isMedical(s)) return "Pensez à emporter votre carte de soins et la liste de vos médicaments.";
+  return null;
+}
+
 // (?<![\p{L}\d]) remplace \b, qui ne reconnaît pas les lettres accentuées (« à », « après »…)
+const DAYS_EXPR = "(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)s?";
 const TIME_EXPR = [
+  // Répétitions, retirées de l'intitulé (« tous les lundis », « chaque matin »…)
+  new RegExp(
+    `(?<![\\p{L}\\d])(?:(?:tous|toutes) les|chaque)\\s+(?:jours?|matins?|soirs?|midis?|semaines?|${DAYS_EXPR}(?:\\s*(?:,|et)\\s*(?:les\\s+)?${DAYS_EXPR})*)(?![\\p{L}])|(?<![\\p{L}\\d])(?:quotidiennement|une fois par semaine)(?![\\p{L}])`,
+    "giu",
+  ),
   /(?<![\p{L}\d])(?:à|a|vers|pour)\s+(?:\d{1,2}|[\p{L}-]+(?: et une?)?)\s*(?:h|heures?)(?![\p{L}])(?:\s*\d{1,2}|\s+et\s+(?:demie?|quart)|\s+moins\s+(?:le\s+)?quart)?(?:\s+(?:du soir|du matin|de l'après-midi|de l'apres-midi))?/giu,
   /(?<![\p{L}\d])(?:à|a)\s+(?:midi|minuit)(?:\s+et\s+(?:demie?|quart))?/giu,
   /(?<![\p{L}\d])dans\s+\S+\s+(?:heures?|minutes?|h|min)(?![\p{L}])(?:\s+et\s+(?:demie?|quart))?/giu,
@@ -137,6 +176,8 @@ export function extractTitle(text) {
     .replace(/\s+/g, " ")
     .replace(/^[\s,.;:!?-]+|[\s,.;:!?-]+$/g, "")
     .replace(/\s+(?:à|a|le|pour|vers)$/i, "")
+    // « Rappelle-moi tous les lundis d'appeler… » : le « d' » reste en tête une fois la répétition retirée
+    .replace(/^(?:de |d'|d’)/i, "")
     .trim();
   if (!t) return null;
   return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 80);
@@ -168,5 +209,28 @@ export function ruleParse(text, now = new Date()) {
     time,
     title: intent === "creer_rappel" ? extractTitle(text) : null,
     type: detectType(text),
+    repeat: intent === "creer_rappel" ? parseRecurrence(text) : null,
+    medical: isMedical(text),
   };
+}
+
+/** Première occurrence d'une répétition à l'heure donnée (aujourd'hui si l'heure n'est pas passée) */
+export function nextOccurrence(repeat, time, now = new Date()) {
+  const [h, m] = time.split(":").map(Number);
+  for (let i = 0; i < 8; i++) {
+    const day = plusDays(dayStart(now), i);
+    const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m);
+    if (at <= now) continue;
+    if (repeat.freq === "quotidien" || !repeat.weekdays?.length || repeat.weekdays.includes(at.getDay())) return toISODate(at);
+  }
+  return null;
+}
+
+/** « tous les jours », « tous les lundis et jeudis » */
+export function speakRepeat(repeat) {
+  if (!repeat) return "";
+  if (repeat.freq === "quotidien") return "tous les jours";
+  const days = (repeat.weekdays ?? []).map((d) => `${WEEKDAYS[d]}s`);
+  if (!days.length) return "toutes les semaines";
+  return `tous les ${days.length > 1 ? `${days.slice(0, -1).join(", ")} et ${days.at(-1)}` : days[0]}`;
 }

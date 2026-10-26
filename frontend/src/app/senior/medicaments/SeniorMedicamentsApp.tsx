@@ -16,9 +16,13 @@ export function SeniorMedicamentsApp() {
 }
 
 // « 08:30 » → « 8 heures 30 », mieux lu par la synthèse vocale
+// Comme l'assistant : « 8 heures et demie », « midi », « 1 heure »
 const spokenTime = (t: string) => {
   const [h, m] = t.split(":").map(Number);
-  return m ? `${h} heures ${m}` : `${h} heures`;
+  if (h === 12 && m === 0) return "midi";
+  if (h === 0 && m === 0) return "minuit";
+  const hours = `${h} heure${h > 1 ? "s" : ""}`;
+  return m === 0 ? hours : m === 30 ? `${hours} et demie` : m === 15 ? `${hours} et quart` : `${hours} ${m}`;
 };
 
 function MedicamentsScreen() {
@@ -63,13 +67,15 @@ function MedicamentsScreen() {
 
   function readAloud() {
     if (!meds) return;
-    if (meds.length === 0) return speak("Vous n'avez aucun traitement en cours.");
-    const parts = meds.map((m) => {
-      const name = [m.name, m.dosage].filter(Boolean).join(" ");
-      const when = m.times.map(spokenTime).join(" et à ");
-      return `${name}, à ${when}${m.instructions ? `, ${m.instructions.toLowerCase()}` : ""}.`;
-    });
-    speak(`Vous avez ${meds.length === 1 ? "un traitement" : `${meds.length} traitements`}. ${parts.join(" ")}`, { natural: true });
+    if (meds.length === 0) return speak("Vous n'avez aucun traitement en cours en ce moment.");
+    // Dans l'ordre de la journée, comme on le raconterait : « À midi, votre Vitamine D. »
+    const doses = meds
+      .flatMap((m) => m.times.map((t) => ({ t, name: [m.name, m.dosage].filter(Boolean).join(" "), note: m.instructions })))
+      .sort((a, b) => a.t.localeCompare(b.t))
+      .map(({ t, name, note }) => `À ${spokenTime(t)}, votre ${name}${note ? `, ${note.charAt(0).toLowerCase()}${note.slice(1)}` : ""}.`);
+    const done = todayIntakes.filter((t) => t.status === "confirme").length;
+    const end = done ? ` Vous en avez déjà pris ${done === 1 ? "un" : done} aujourd'hui, bravo !` : "";
+    speak(`Voici votre traitement de la journée. ${doses.join(" ")}${end}`, { natural: true });
   }
 
   const todayIntakes = meds?.flatMap((m) => m.today) ?? [];
@@ -157,7 +163,7 @@ function MedicamentsScreen() {
                           <button
                             onClick={() => confirm(t.id)}
                             disabled={busyId === t.id}
-                            className="flex min-h-16 items-center gap-2 rounded-2xl bg-ok-700 px-5 text-[22px] font-extrabold text-white hover:brightness-90 disabled:opacity-60"
+                            className="flex min-h-16 items-center gap-2 rounded-2xl bg-ok-600 px-5 text-[22px] font-extrabold text-white hover:brightness-90 disabled:opacity-60"
                           >
                             {busyId === t.id ? <Loader2 className="h-6 w-6 animate-spin" /> : <Check className="h-6 w-6" strokeWidth={3} />} Je l&apos;ai pris
                           </button>

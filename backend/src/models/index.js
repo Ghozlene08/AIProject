@@ -4,6 +4,7 @@ export { default as Contact } from "./Contact.js";
 export { default as Medication } from "./Medication.js";
 export { default as Intake } from "./Intake.js";
 export { default as Event } from "./Event.js";
+export { default as ReminderSeries } from "./ReminderSeries.js";
 export { default as Alert } from "./Alert.js";
 export { default as WeeklySummary } from "./WeeklySummary.js";
 export { default as AiProvider } from "./AiProvider.js";

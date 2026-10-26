@@ -13,6 +13,11 @@ const eventSchema = new mongoose.Schema(
     status: { type: String, enum: ["prevu", "fait", "annule"], default: "prevu" },
     // Le senior a vu le rappel au moment prévu (bouton « C'est noté » ou réponse vocale)
     acknowledgedAt: Date,
+    // Occurrence d'un rappel répété
+    series: { type: mongoose.Schema.Types.ObjectId, ref: "ReminderSeries", index: true },
+    // Lié à la santé (détecté par règles + LLM) : l'aidant est prévenu quand le senior l'ajoute
+    medical: { type: Boolean, default: false },
+    caregiverNotifiedAt: Date,
   },
   { timestamps: true },
 );

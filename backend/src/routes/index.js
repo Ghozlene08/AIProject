@@ -6,6 +6,7 @@ import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
 
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
+import * as telegram from "../controllers/telegram.controller.js";
 import * as admin from "../controllers/admin.controller.js";
 import * as sos from "../controllers/sos.controller.js";
 import * as riskAnalyzer from "../controllers/riskAnalyzer.controller.js";
@@ -39,6 +40,8 @@ router.put("/auth/password", requireAuth, auth.changePassword);
 const a = Router();
 a.use(requireAuth, requireRole("aidant", "admin"));
 a.get("/seniors", aidant.listSeniors);
+// Liaison Telegram de l'aidant (Paramètres → « Connecter Telegram »)
+a.get("/telegram", telegram.status); a.post("/telegram/link", telegram.link); a.post("/telegram/test", telegram.test); a.delete("/telegram", telegram.unlink);
 a.post("/seniors", uploadSeniorPhoto, aidant.createSenior);
 
 // SOS d'un aidant (tous seniors confondus)

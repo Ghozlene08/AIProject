@@ -16,6 +16,7 @@ import {
   Mic,
   Pill,
   Plus,
+  Repeat,
   Stethoscope,
   Trash2,
   Utensils,
@@ -59,7 +60,7 @@ export function FaceLoginRequired({ what = "votre agenda" }: { what?: string }) 
         <p className="mt-2 text-[22px] leading-snug text-ink">Pour voir {what}, connectez-vous simplement avec votre visage.</p>
         <Link
           href="/connexion?espace=senior"
-          className="mt-8 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-800 px-4 py-3 text-[24px] leading-tight font-extrabold text-white hover:bg-brand-900"
+          className="mt-8 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-600 px-4 py-3 text-[24px] leading-tight font-extrabold text-white hover:bg-brand-700"
         >
           <Camera className="h-7 w-7 shrink-0" /> Me connecter avec mon visage
         </Link>
@@ -179,14 +180,14 @@ function AgendaScreen() {
   function cancelEvent(item: AgendaItem) {
     if (removing) commitRemoval(removing);
     setRemoving(item);
-    speak("Rappel supprimé. Vous pouvez encore l'annuler.");
+    speak(item.repeat ? "C'est fait, ce rappel ne se répétera plus. Si c'est une erreur, touchez « Annuler »." : "C'est supprimé. Si c'est une erreur, touchez « Annuler ».");
     removeTimer.current = window.setTimeout(() => commitRemoval(item), 8000);
   }
 
   function undoRemoval() {
     window.clearTimeout(removeTimer.current);
     setRemoving(null);
-    speak("C'est annulé, le rappel est conservé.");
+    speak("Pas de souci, je garde ce rappel.");
   }
 
   // En quittant la page, une suppression en attente est appliquée
@@ -256,7 +257,7 @@ function AgendaScreen() {
               aria-pressed={day === d.iso}
               className={cx(
                 "min-h-16 rounded-2xl text-[22px] font-extrabold transition-colors",
-                day === d.iso ? "bg-brand-800 text-white" : "text-ink hover:bg-brand-50",
+                day === d.iso ? "bg-brand-600 text-white" : "text-ink hover:bg-brand-50",
               )}
             >
               {d.text}
@@ -288,7 +289,9 @@ function AgendaScreen() {
       {/* Annulation d'une suppression (8 secondes) */}
       {removing && (
         <div role="status" className="fixed inset-x-0 bottom-32 z-30 mx-auto flex w-[calc(100%-2rem)] max-w-3xl flex-wrap items-center gap-4 rounded-3xl bg-ink px-6 py-4 text-white shadow-pop">
-          <p className="min-w-0 flex-1 text-[22px] font-bold">Rappel « {removing.title} » supprimé</p>
+          <p className="min-w-0 flex-1 text-[22px] font-bold">
+            {removing.repeat ? `Rappel répété « ${removing.title} » arrêté` : `Rappel « ${removing.title} » supprimé`}
+          </p>
           <button onClick={undoRemoval} className="min-h-16 rounded-2xl bg-white px-6 text-[22px] font-extrabold text-brand-900 hover:bg-brand-50">
             Annuler
           </button>
@@ -300,7 +303,7 @@ function AgendaScreen() {
         <div className="mx-auto flex max-w-3xl gap-3 px-4 py-4 sm:px-6">
           <button
             onClick={() => setVoiceOpen(true)}
-            className="flex min-h-20 flex-1 items-center justify-center gap-3 rounded-3xl bg-brand-800 px-4 text-[24px] font-extrabold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-900"
+            className="flex min-h-20 flex-1 items-center justify-center gap-3 rounded-3xl bg-brand-600 px-4 text-[24px] font-extrabold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700"
           >
             <Mic className="h-8 w-8" /> Créer un rappel à la voix
           </button>
@@ -359,12 +362,17 @@ function AgendaRow({ item, now, busy, onConfirm, onCancel }: { item: AgendaItem;
             {isPrise ? item.note : item.detail}
           </p>
         )}
+        {item.repeat && (
+          <p className="mt-0.5 flex items-center gap-1.5 text-[18px] font-bold text-brand-800">
+            <Repeat className="h-5 w-5 shrink-0" aria-hidden="true" /> {item.repeat.charAt(0).toUpperCase() + item.repeat.slice(1)}
+          </p>
+        )}
         {item.createdBy === "senior" && <p className="mt-0.5 text-[17px] font-semibold text-brand-800">Ajouté par vous</p>}
       </div>
       {isPrise && item.status === "confirme" && <Status tone="ok" icon={<Check className="h-6 w-6" strokeWidth={3} />} label="Pris" />}
       {isPrise && item.status === "manque" && <Status tone="warn" icon={<Clock className="h-6 w-6" />} label="Non confirmé" />}
       {due && (
-        <button onClick={onConfirm} disabled={busy} className="flex min-h-16 items-center gap-2 rounded-2xl bg-ok-700 px-5 text-[22px] font-extrabold text-white hover:brightness-90 disabled:opacity-60">
+        <button onClick={onConfirm} disabled={busy} className="flex min-h-16 items-center gap-2 rounded-2xl bg-ok-600 px-5 text-[22px] font-extrabold text-white hover:brightness-90 disabled:opacity-60">
           {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Check className="h-6 w-6" strokeWidth={3} />} Je l&apos;ai pris
         </button>
       )}
@@ -372,7 +380,7 @@ function AgendaRow({ item, now, busy, onConfirm, onCancel }: { item: AgendaItem;
       {!isPrise && (item.status === "fait" || past) && <Status tone="muted" icon={<Check className="h-6 w-6" />} label="Passé" />}
       {!isPrise && !past && item.status === "prevu" && item.createdBy !== "senior" && <Status tone="brand" icon={<Clock className="h-6 w-6" />} label="À venir" />}
       {!isPrise && !past && item.createdBy === "senior" && (
-        <button onClick={onCancel} className="flex min-h-16 items-center gap-2 rounded-2xl px-4 text-[20px] font-bold text-ink-soft hover:bg-danger-50 hover:text-danger-700" aria-label={`Supprimer le rappel ${item.title}`}>
+        <button onClick={onCancel} className="flex min-h-16 items-center gap-2 rounded-2xl px-4 text-[20px] font-bold text-ink-soft hover:bg-danger-50 hover:text-danger-700" aria-label={item.repeat ? `Arrêter le rappel répété ${item.title}` : `Supprimer le rappel ${item.title}`}>
           <Trash2 className="h-6 w-6" /> Supprimer
         </button>
       )}
@@ -402,16 +410,26 @@ function AddReminder({ defaultDate, onClose, onSaved }: { defaultDate: string; o
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState("");
+  const [repeat, setRepeat] = useState<"non" | "quotidien" | "hebdomadaire">("non");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // « Chaque mardi » : le jour de la semaine de la date choisie
+  const weekday = date ? new Date(`${date}T12:00`).toLocaleDateString("fr-FR", { weekday: "long" }) : "";
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const res = await seniorApi.post<{ duplicate?: boolean }>("/events", { title, date, time, type: "rappel" });
-      speak(res.duplicate ? `Ce rappel est déjà dans votre agenda : ${title}.` : `C'est noté : ${title}.`);
+      const res = await seniorApi.post<{ duplicate?: boolean; speech?: string }>("/events", {
+        title,
+        date,
+        time,
+        type: "rappel",
+        repeat: repeat === "non" ? undefined : { freq: repeat, weekdays: repeat === "hebdomadaire" ? [new Date(`${date}T12:00`).getDay()] : [] },
+      });
+      // La phrase du serveur indique aussi les conseils (conflit, préparation) et si l'aidant est prévenu
+      speak(res.speech ?? (res.duplicate ? `Ce rappel est déjà dans votre agenda : ${title}.` : `C'est noté : ${title}.`));
       onSaved();
     } catch (err) {
       setError(err instanceof SeniorApiError ? err.message : "Impossible d'enregistrer le rappel.");
@@ -443,8 +461,31 @@ function AddReminder({ defaultDate, onClose, onSaved }: { defaultDate: string; o
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required className={field} />
           </label>
         </div>
+        <fieldset className="mt-4">
+          <legend className="text-[22px] font-bold text-ink">Répéter ?</legend>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {[
+              { v: "non" as const, label: "Une fois" },
+              { v: "quotidien" as const, label: "Chaque jour" },
+              { v: "hebdomadaire" as const, label: weekday ? `Chaque ${weekday}` : "Chaque semaine" },
+            ].map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => setRepeat(o.v)}
+                aria-pressed={repeat === o.v}
+                className={cx(
+                  "min-h-16 rounded-2xl border-2 px-2 text-[19px] font-extrabold leading-tight transition-colors",
+                  repeat === o.v ? "border-brand-600 bg-brand-600 text-white" : "border-line text-ink hover:bg-brand-50",
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
         {error && <p className="mt-4 rounded-2xl bg-danger-50 p-4 text-[20px] font-bold text-danger-700">{error}</p>}
-        <button disabled={saving} className="mt-6 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-800 text-[24px] font-extrabold text-white hover:bg-brand-900 disabled:opacity-60">
+        <button disabled={saving} className="mt-6 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-600 text-[24px] font-extrabold text-white hover:bg-brand-700 disabled:opacity-60">
           {saving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Check className="h-7 w-7" strokeWidth={3} />} Enregistrer le rappel
         </button>
       </form>
@@ -495,7 +536,7 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
     hiddenUntil.current.set(current.id, Date.now() + SNOOZE_MS);
     setQueue((q) => q.slice(1));
     stopSpeaking();
-    speak("D'accord, je vous le rappellerai dans 10 minutes.");
+    speak("Entendu, je vous le redis dans 10 minutes.");
   };
 
   async function act() {
@@ -518,7 +559,7 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/60 p-4" role="alertdialog" aria-modal="true" aria-labelledby="rappel-titre">
       <div className="fade-up w-full max-w-lg rounded-[32px] bg-white p-8 text-center shadow-pop">
         <span className="pulse-ring relative mx-auto flex h-24 w-24 items-center justify-center rounded-full text-brand-200">
-          <span className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full bg-brand-800 text-white">
+          <span className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full bg-brand-600 text-white">
             {current.kind === "prise" ? <Pill className="h-12 w-12" /> : <BellRing className="h-12 w-12" />}
           </span>
         </span>
@@ -528,7 +569,7 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
         </h2>
         <p className="mt-2 text-[26px] font-bold text-ink">{current.detail}</p>
         <div className="mt-8 grid gap-3">
-          <button onClick={act} className="flex min-h-20 items-center justify-center gap-3 rounded-3xl bg-ok-700 text-[26px] font-extrabold text-white hover:brightness-90">
+          <button onClick={act} className="flex min-h-20 items-center justify-center gap-3 rounded-3xl bg-ok-600 text-[26px] font-extrabold text-white hover:brightness-90">
             <Check className="h-8 w-8" strokeWidth={3} /> {current.kind === "prise" ? "Je l'ai pris" : "C'est noté"}
           </button>
           <button onClick={close} className="min-h-16 rounded-3xl text-[22px] font-bold text-ink-soft hover:bg-canvas">
