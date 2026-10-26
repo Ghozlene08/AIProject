@@ -26,6 +26,8 @@ F1 utilise le JWT Senior déjà délivré par `/auth/senior/face-login`. Il ne s
 
 Aucune seconde connexion par PIN n’est ajoutée. Le jeton facial existant est conservé selon le fonctionnement du projet, avec une expiration déterminée par `JWT_EXPIRES_IN`. Le gestionnaire de comptes Aidant ne tente plus de vérifier ce jeton dans `/auth/me`, ce qui évite de l’effacer au rechargement. La connexion Senior reste accessible lorsque l’aidant utilise déjà le même navigateur.
 
+F1 est disponible directement après la connexion Senior normale, avec le jeton existant : aucune activation supplémentaire n’est nécessaire. Les serveurs restent à lancer manuellement avec `npm run dev` depuis AIProject. Aucun lancement automatique du projet n’est ajouté.
+
 Les documents, appels et SOS existants sont conservés dans l’accueil. Le micro et la lecture F1 sont mis en pause pendant un appel ou une alerte de sécurité. Le LLM classe maintenant les demandes en dialogue, navigation ou météo. Le serveur vérifie le JSON et les destinations autorisées avant de renvoyer une action. Le navigateur ouvre la rubrique après la lecture vocale ; un bouton permet de l’ouvrir immédiatement. Une action n’est jamais rejouée en rechargeant l’historique.
 
 ## Demandes et actions
