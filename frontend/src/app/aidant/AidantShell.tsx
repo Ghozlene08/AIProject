@@ -50,9 +50,9 @@ function Inner({ children }: { children: React.ReactNode }) {
       <div className="flex items-center gap-3">
         <Avatar name={`${senior.firstName} ${senior.lastName}`} />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-muted">Proche suivi</p>
+          <p className="text-xs font-semibold text-muted">Senior suivi</p>
           {seniors.length > 1 ? (
-            <Select aria-label="Choisir le proche suivi" value={senior._id} onChange={(e) => select(e.target.value)} className="mt-0.5 h-8 border-0 bg-transparent px-0 font-bold">
+            <Select aria-label="Choisir le senior suivi" value={senior._id} onChange={(e) => select(e.target.value)} className="mt-0.5 h-8 border-0 bg-transparent px-0 font-bold">
               {seniors.map((s) => (
                 <option key={s._id} value={s._id}>
                   {s.firstName} {s.lastName}
@@ -67,7 +67,7 @@ function Inner({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <button onClick={() => setCreating(true)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">
-        <Plus className="h-3.5 w-3.5" /> Ajouter un proche
+        <Plus className="h-3.5 w-3.5" /> Ajouter un senior
       </button>
     </div>
   );

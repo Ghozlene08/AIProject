@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { tokenStore } from "@/lib/api";
+import { seniorToken } from "@/lib/senior/api";
 import {
   Camera,
   CameraOff,
@@ -128,7 +128,10 @@ const [recognizing, setRecognizing] = useState(false);
       );
     }
 
-    tokenStore.set(data.token);
+    // Session du senior : stockée à part de celle des aidants et administrateurs
+    // (sinon la vérification de session aidant l'effacerait au rechargement de la page)
+    seniorToken.set(data.token);
+    window.dispatchEvent(new Event("sa:senior-login"));
 // Stocker l'id du senior connecté
 localStorage.setItem("seniorId", data.senior._id);
     console.log("Senior reconnu :", data.senior);

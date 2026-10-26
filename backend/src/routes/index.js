@@ -1,18 +1,24 @@
 import { Router } from "express";
 import assistantRouter from "./assistant.routes.js";
 import mongoose from "mongoose";
-import { aidantMemoryRouter } from "./souvenirs/souvenirs.routes.js";
-import { loadSenior, requireAuth, requireRole } from "../middlewares/auth.js";
+import { loadSenior, requireAuth, requireRole, requireSenior } from "../middlewares/auth.js";
 import { uploadSeniorPhoto } from "../middlewares/seniorPhoto.js";
+import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
+
 import * as auth from "../controllers/auth.controller.js";
 import * as aidant from "../controllers/aidant.controller.js";
+import * as telegram from "../controllers/telegram.controller.js";
 import * as admin from "../controllers/admin.controller.js";
 import * as sos from "../controllers/sos.controller.js";
 import * as riskAnalyzer from "../controllers/riskAnalyzer.controller.js";
 import { analyzeSeniorRisk } from "../services/riskAnalyzer.service.js";
 import * as checkInController from "../controllers/checkIn.controller.js";
-import { uploadFaceLogin } from "../middlewares/seniorFaceLogin.js";
 import * as stats from "../controllers/analytics.controller.js";
+import * as senior from "../controllers/senior.controller.js";
+import { optionalSenior, trackDocument, trackFaceLogin } from "../middlewares/usageTracking.js";
+import { aidantMemoryRouter } from "./souvenirs/souvenirs.routes.js";
+import { seniorRouter } from "./senior/senior.routes.js";
+
 import { uploadDocument } from "../middlewares/documentUpload.js";
 import * as document from "../controllers/document.controller.js";
 import * as callCtrl from "../controllers/call.controller.js";
@@ -26,7 +32,8 @@ router.get("/health", (_req, res) => {
 /* ---------- Authentification ---------- */
 router.post("/auth/register", auth.register);
 router.post("/auth/login", auth.login);
-router.post("/auth/senior/face-login", uploadFaceLogin, auth.seniorFaceLogin);
+router.post("/auth/senior/face-login", trackFaceLogin, uploadFaceLogin, auth.seniorFaceLogin);
+
 router.get("/auth/me", requireAuth, auth.me);
 router.put("/auth/me", requireAuth, auth.updateMe);
 router.put("/auth/password", requireAuth, auth.changePassword);
@@ -35,6 +42,8 @@ router.put("/auth/password", requireAuth, auth.changePassword);
 const a = Router();
 a.use(requireAuth, requireRole("aidant", "admin"));
 a.get("/seniors", aidant.listSeniors);
+// Liaison Telegram de l'aidant (Paramètres → « Connecter Telegram »)
+a.get("/telegram", telegram.status); a.post("/telegram/link", telegram.link); a.post("/telegram/test", telegram.test); a.delete("/telegram", telegram.unlink);
 a.post("/seniors", uploadSeniorPhoto, aidant.createSenior);
 
 // SOS d'un aidant (tous seniors confondus)
@@ -47,7 +56,6 @@ const s = Router({ mergeParams: true });
 s.use(loadSenior);
 s.get("/", aidant.getSenior);
 s.put("/", uploadSeniorPhoto, aidant.updateSenior);
-s.post("/pairing", aidant.regeneratePairing);
 s.get("/dashboard", aidant.dashboard);
 s.get("/check-ins", checkInController.listCheckIns); // historique des check-ins d'un senior
 s.get("/calls", callCtrl.listSeniorCalls); // call history of one senior
@@ -89,6 +97,33 @@ s.get("/risk-analysis", riskAnalyzer.analyzeRisk);
 
 a.use("/seniors/:seniorId", s);
 router.use("/aidant", a);
+
+/* ---------- Espace Senior (F2 : agenda et rappels) ---------- */
+// Connexion du senior : uniquement par reconnaissance faciale (POST /auth/senior/face-login).
+// Comme dans senior.routes.js, la session est vérifiée ROUTE PAR ROUTE (pas de sn.use) :
+// les autres routes /api/senior/... de l'équipe (SOS, check-in, souvenirs…) ne sont pas bloquées.
+// La reconnaissance vocale utilise la route commune POST /api/senior/stt (senior.routes.js).
+const sn = Router();
+sn.get("/me", requireSenior, senior.me);
+sn.get("/agenda", requireSenior, senior.agenda);
+sn.get("/briefing", requireSenior, senior.briefing);
+sn.get("/contacts", requireSenior, senior.contacts); sn.get("/medications", requireSenior, senior.medications);
+sn.get("/reminders/due", requireSenior, senior.dueReminders);
+sn.post("/intakes/:id/confirm", requireSenior, senior.confirmIntake);
+sn.post("/events", requireSenior, senior.createEvent);
+sn.delete("/events/:id", requireSenior, senior.cancelEvent);
+sn.post("/events/:id/ack", requireSenior, senior.ackEvent);
+sn.post("/voice/agenda", requireSenior, senior.voiceAgenda);
+sn.post("/voice/confirm", requireSenior, senior.voiceConfirm);
+sn.post("/voice/tts", requireSenior, senior.tts);
+router.use("/senior", sn);
+
+// Mesure d'usage du module « Photo → Compris » (Arwa), sans toucher à ses routes ci-dessous :
+// le senior est identifié si une session est présente, l'événement est enregistré d'après la réponse.
+router.use("/documents", optionalSenior, trackDocument);
+
+/* ---------- Interface Senior ---------- */
+router.use("/senior", seniorRouter);
 
 /* ---------- Documents senior ---------- */
 router.post("/documents/ocr", uploadDocument, document.extractDocumentText);
@@ -139,7 +174,6 @@ router.post("/senior/sos", loadSeniorFromBody, sos.triggerSOS);
 // Check-in : le senior consulte et confirme (identifié par seniorId)
 router.get("/senior/check-in/pending", checkInController.getPendingCheckIn);
 router.post("/senior/check-in/:checkInId/respond", checkInController.respondToCheckInAsSenior);
-
 /* ---------- Administration ---------- */
 const ad = Router();
 ad.use(requireAuth, requireRole("admin"));

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_URL, tokenStore } from "@/lib/api";
+import { API_URL } from "@/lib/api";
+import { seniorToken as tokenStore } from "@/lib/senior/api";
 
 const root = API_URL.replace(/\/+$/, "");
 const ENDPOINT = `${root.endsWith("/api") ? root : `${root}/api`}/senior/assistant`;

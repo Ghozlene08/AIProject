@@ -29,6 +29,7 @@
     "msedge-tts": "^2.1.1",
     "multer": "^2.4.0",
     "pdf-parse": "^2.4.5",
+    "qrcode": "^1.5.4",
     "senior-assistant": "file:..",
     "sharp": "^0.35.5",
     "socket.io": "^4.8.4",

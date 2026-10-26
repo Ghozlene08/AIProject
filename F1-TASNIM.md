@@ -24,6 +24,8 @@ Vérification du compte Groq effectuée le 26 octobre 2026 : Whisper et `openai/
 
 F1 utilise le JWT Senior déjà délivré par `/auth/senior/face-login`. Il ne se fie jamais à un `seniorId` envoyé par le navigateur pour charger la mémoire. Le rôle et le profil sont vérifiés à chaque appel par `requireSeniorAuth`.
 
+Après intégration de `mariemsellami`, F1 lit le jeton avec le helper commun `seniorToken` de `frontend/src/lib/senior/api.ts`, comme la connexion faciale et les modules F2/F4. Les appels F1 ne doivent pas utiliser le jeton Aidant `sa_token`. La connexion Senior normale suffit ; aucune activation supplémentaire de F1 ni session de démonstration n’est ouverte par F1. Les redirections vers l’agenda et les médicaments ouvrent désormais les pages complètes du module F2 récupérées dans cette branche.
+
 Aucune seconde connexion par PIN n’est ajoutée. Le jeton facial existant est conservé selon le fonctionnement du projet, avec une expiration déterminée par `JWT_EXPIRES_IN`. Le gestionnaire de comptes Aidant ne tente plus de vérifier ce jeton dans `/auth/me`, ce qui évite de l’effacer au rechargement. La connexion Senior reste accessible lorsque l’aidant utilise déjà le même navigateur.
 
 F1 est disponible directement après la connexion Senior normale, avec le jeton existant : aucune activation supplémentaire n’est nécessaire. Les serveurs restent à lancer manuellement avec `npm run dev` depuis AIProject. Aucun lancement automatique du projet n’est ajouté.
@@ -121,9 +123,19 @@ Les nouvelles pages Médicaments et Agenda ont également été ouvertes dans le
 
 Le script racine `backend/test-caregiver.js` attend un SOS en direct et ne se termine pas seul. Pour les tests automatisés, utiliser uniquement les fichiers `backend/test/*.test.js`.
 
-## Préserver le travail avant le prochain git pull
+## Vérification après intégration de mariemsellami — 26 octobre 2026
 
-Les nouveaux fichiers F1 doivent aussi être versionnés. Vérifier `git status` et faire une sauvegarde ou un commit avant de réinitialiser la branche. Aucun commit ni aucune suppression de modifications existantes n’a été effectué pendant cette réintégration.
+La fusion locale précédente a été sauvegardée, puis `mariemsellami` a été récupérée dans `tasnimchtila`. Les treize conflits du pull ont été réconciliés : F1 conservé, nouvelles pages F2 et fonctionnalités de l’équipe reprises. Le manifeste backend reçu contenait une clé dupliquée et une virgule manquante ; le manifeste et le verrou complet npm ont été réconciliés et les dépendances ajoutées installées sans scripts d’installation. Deux tests STT déclarés hors base de données ont été isolés de MongoDB par des mocks, sans changer la logique du service STT.
+
+Résultats : 88 tests backend passent, le contrôle de syntaxe JavaScript backend et TypeScript passent, ainsi que le lint des adaptations F1 vérifiées. Aucun serveur applicatif n’a été démarré et aucun push n’a été effectué.
+
+La compilation de production n’est pas validée : Turbopack échoue lors du traitement du CSS dans un sous-processus ; la compilation Webpack et son contrôle TypeScript réussissent, puis le prérendu bloque sur `/senior/souvenirs/ecouter/[id]` (`useParams()` sans frontière `Suspense`). La page de quiz utilise aussi ce hook. À la demande explicite de Tasnim, F4 est laissé inchangé : la correction proposée n’a pas été appliquée. Next.js affiche également une alerte de sécurité sur la version installée ; aucune mise à niveau du framework n’a été faite.
+
+Le parcours complet avec la caméra, le microphone et les services externes n’a pas été rejoué après ce pull. Le démarrage du projet reste manuel avec `npm run dev`.
+
+## Sauvegarde avant le prochain git pull
+
+Les nouveaux fichiers F1 doivent aussi être versionnés. Vérifier `git status` et faire une sauvegarde ou un commit avant de réinitialiser la branche. Les sauvegardes et les commits locaux permettent de retrouver l’état précédent en cas de conflit.
 
 ## Références techniques
 

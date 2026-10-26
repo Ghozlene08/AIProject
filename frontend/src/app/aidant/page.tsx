@@ -59,7 +59,7 @@ export default function AidantDashboard() {
           </p>
           <p className="text-sm text-muted">
             {senior.age ? `${senior.age} ans` : "Âge non renseigné"}
-            {senior.pairedAt ? ` · Appairée depuis le ${new Date(senior.pairedAt).toLocaleDateString("fr-FR")}` : " · Appareil non appairé"}
+            {senior.photoUrl ? " · Connexion par reconnaissance faciale activée" : " · Photo du visage à ajouter pour activer la connexion"}
           </p>
           {senior.doctor?.name && (
             <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">

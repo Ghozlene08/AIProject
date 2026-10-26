@@ -6,6 +6,7 @@ const alertSchema = new mongoose.Schema(
     senior: { type: mongoose.Schema.Types.ObjectId, ref: "Senior", required: true, index: true },
     type: {
       type: String,
+      // Types de toute l'équipe : prises (scheduler), appels et check-in (Arwa), souvenirs (module F4)…
       enum: ["prise_manquee", "appel_manque", "sos", "checkin_manque", "rdv", "symptome", "synthese", "souvenir_enregistre", "info"],
       required: true,
     },

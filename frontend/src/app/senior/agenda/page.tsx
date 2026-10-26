@@ -1,7 +1,10 @@
-import { ConnexionReussie } from "../connexion-reussie/ConnexionReussie";
+import type { Metadata } from "next";
+import { SeniorAgendaApp } from "./SeniorAgendaApp";
 
-export const metadata = { title: "Mon agenda" };
-export const instant = false;
-export default function AgendaPage() {
-  return <ConnexionReussie initialView="Agenda" redirectMs={0} />;
+export const metadata: Metadata = { title: "Mon agenda" };
+
+// Module F2 « Agenda et rappels » de l'interface Senior.
+// Page autonome : le routage avec les autres pages Senior sera fait par l'équipe.
+export default function SeniorAgendaPage() {
+  return <SeniorAgendaApp />;
 }

@@ -11,6 +11,7 @@ import {
   FileText,
   Heart,
   Home,
+  LayoutGrid,
   Loader2,
   LogOut,
   MessageSquare,
@@ -28,10 +29,13 @@ import {
 } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { cx } from "@/components/ui";
+import { assetUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { clearSeniorSession } from "@/lib/senior/api";
+import { type NextIntake, type SeniorContact, SeniorApiError, seniorApi, seniorToken } from "@/lib/seniorApi";
+import { disconnectSocket } from "@/lib/socket";
 import { useCaregiverCall } from "@/lib/useCaregiverCall";
 import { formatDuration } from "@/lib/rtc";
-import { tokenStore } from "@/lib/api";
 import { ASSISTANT_PATHS, useSeniorAssistant } from "@/lib/assistant/useSeniorAssistant";
 import { AssistantMicro } from "@/components/assistant/AssistantMicro";
 import { MessagesPanel } from "@/components/assistant/MessagesPanel";
@@ -166,31 +170,41 @@ const REDIRECT_MS = 3000;
  */
 type SeniorView = "Accueil" | "Messages" | "Médicaments" | "Agenda";
 export function ConnexionReussie({ data = DEMO, redirectMs = REDIRECT_MS, initialView = "Accueil" }: { data?: SeniorAccueilData; redirectMs?: number; initialView?: SeniorView }) {
-  const [phase, setPhase] = useState<"succes" | "accueil">("succes");
+  const [phase, setPhase] = useState<"init" | "succes" | "accueil">("init");
   const [progress, setProgress] = useState(0);
-const [firstName, setFirstName] = useState(data.firstName);
-const [lastName, setLastName] = useState(data.lastName);
-const [photoUrl, setPhotoUrl] = useState(data.photoUrl);
+  const [firstName, setFirstName] = useState(data.firstName);
+  const [lastName, setLastName] = useState(data.lastName);
+  const [photoUrl, setPhotoUrl] = useState(data.photoUrl);
 
-useEffect(() => {
-  const storedFirstName = localStorage.getItem("seniorFirstName");
-   const storedLastName = localStorage.getItem("seniorLastName");
-   const storedPhotoUrl = localStorage.getItem("seniorPhotoUrl");
-
-  if (storedFirstName) {
-    setFirstName(storedFirstName);
-  }
-    if (storedLastName) {
-    setLastName(storedLastName);
-  }
-  if (storedPhotoUrl) {
-  setPhotoUrl(`http://localhost:5000${storedPhotoUrl}`);
-}
-}, []);
   useEffect(() => {
+    const storedFirstName = localStorage.getItem("seniorFirstName");
+    const storedLastName = localStorage.getItem("seniorLastName");
+    const storedPhotoUrl = localStorage.getItem("seniorPhotoUrl");
+
+    if (storedFirstName) {
+      setFirstName(storedFirstName);
+    }
+    if (storedLastName) {
+      setLastName(storedLastName);
+    }
+    if (storedPhotoUrl) {
+      setPhotoUrl(assetUrl(storedPhotoUrl));
+    }
+  }, []);
+
+  useEffect(() => {
+    // Retour depuis une autre page Senior (Souvenirs…) avec ?vue=accueil :
+    // directement le tableau de bord, sans rejouer « Visage reconnu avec succès »
+    if (new URLSearchParams(window.location.search).get("vue") === "accueil") {
+      const show = window.setTimeout(() => setPhase("accueil"), 0);
+      return () => window.clearTimeout(show);
+    }
+    const first = window.setTimeout(() => setPhase("succes"), 0);
     const start = window.setTimeout(() => setProgress(100), 50);
-    const done = window.setTimeout(() => setPhase("accueil"), redirectMs);
+    // Retour depuis une autre page Senior (…#accueil) : pas de nouvel écran « Visage reconnu »
+    const done = window.setTimeout(() => setPhase("accueil"), window.location.hash === "#accueil" ? 0 : redirectMs);
     return () => {
+      window.clearTimeout(first);
       window.clearTimeout(start);
       window.clearTimeout(done);
     };
@@ -201,6 +215,7 @@ const connectedSenior = {
   lastName,
    photoUrl,
 };
+  if (phase === "init") return <div className="min-h-screen flex-1 bg-canvas" />;
   return phase === "succes" && initialView === "Accueil"
   ? <SuccesCard
       data={connectedSenior}
@@ -255,7 +270,7 @@ function Portrait({ data, className }: { data: SeniorAccueilData; className?: st
   if (data.photoUrl) {
     // Photo issue de la caméra (data URL) : balise img volontaire, pas d'optimisation Next nécessaire
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={data.photoUrl} alt={`${data.firstName} ${data.lastName}`} className={cx("rounded-full object-cover", className)} />;
+    return <img src={assetUrl(data.photoUrl)} alt={`${data.firstName} ${data.lastName}`} className={cx("rounded-full object-cover", className)} />;
   }
   return (
     <span className={cx("flex items-center justify-center rounded-full bg-gradient-to-br from-brand-100 to-brand-200 text-brand-700", className)} role="img" aria-label={`${data.firstName} ${data.lastName}`}>
@@ -287,7 +302,21 @@ const MOBILE_NAV: { label: string; icon: LucideIcon }[] = [
   { label: "Messages", icon: MessageSquare },
 ];
 
-// Raccourcis : non reliés pour l'instant (le routage sera ajouté par l'équipe)
+// Pages Senior déjà disponibles (les autres entrées seront reliées au fil des modules)
+const ROUTES: Record<string, string> = {
+  Accueil: "/senior/connexion-reussie?vue=accueil",
+  Messages: "/senior/messages",
+  Agenda: "/senior/agenda",
+  "Mon agenda": "/senior/agenda",
+  Médicaments: "/senior/medicaments",
+  "Mes médicaments": "/senior/medicaments",
+  Documents: "/senior/documents",
+  "Mes documents": "/senior/documents",
+  // Module F4 — Souvenirs
+  Souvenirs: "/senior/souvenirs",
+};
+
+// Raccourcis de l'accueil
 const SHORTCUTS: { label: string; icon: LucideIcon; cardCls: string; iconCls: string }[] = [
   { label: "Mon agenda", icon: CalendarDays, cardCls: "bg-brand-50 border-brand-100", iconCls: "bg-brand-600 text-white" },
   { label: "Mes médicaments", icon: Pill, cardCls: "bg-teal-50 border-teal-100", iconCls: "bg-teal-500 text-white" },
@@ -314,6 +343,41 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
   // Fenêtre « Mes proches » (liste de contacts téléphoniques)
   const [callOpen, setCallOpen] = useState(false);
 
+  // Vraies données du senior (API de l'espace Senior) : proches saisis par l'aidant et prochaine prise
+  const [contacts, setContacts] = useState<SeniorContact[]>([]);
+  // Prochaine prise réelle uniquement : sans session ou sans prise, la carte n'est pas affichée
+  const [nextIntake, setNextIntake] = useState<NextIntake | null>(null);
+  const loadNextIntake = () =>
+    seniorApi
+      .get<{ next: NextIntake | null }>("/medications")
+      .then((r) => setNextIntake(r.next))
+      .catch(() => setNextIntake(null));
+  useEffect(() => {
+    if (!seniorToken.get()) return;
+    seniorApi
+      .get<{ contacts: SeniorContact[] }>("/contacts")
+      .then((r) => r.contacts.length && setContacts(r.contacts))
+      .catch(() => {});
+    loadNextIntake();
+  }, []);
+  const prochainePrise = nextIntake ? { medicament: nextIntake.name, heure: nextIntake.time, late: nextIntake.late } : null;
+
+  async function confirmPrise() {
+    if (!nextIntake) return;
+    try {
+      const res = await seniorApi.post<{ speech: string }>(`/intakes/${nextIntake.id}/confirm`);
+      speak(res.speech);
+    } catch (err) {
+      if (err instanceof SeniorApiError) speak(err.message);
+      return;
+    }
+    setPriseConfirmee(true);
+    // Après un court « Prise confirmée », la carte passe à la prise suivante
+    window.setTimeout(() => {
+      loadNextIntake().finally(() => setPriseConfirmee(false));
+    }, 2500);
+  }
+
   // Appel vocal vers l'aidant (WebRTC)
   const call = useCaregiverCall();
 
@@ -326,6 +390,16 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
   const respondingRef = useRef(false);
 
   const router = useRouter();
+  // Menu sous le nom du senior (en haut à droite) : « Se déconnecter »
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Déconnexion : efface la session du senior, coupe le socket des appels, retour à la connexion senior
+  function logout() {
+    assistant.stop();
+    clearSeniorSession();
+    disconnectSocket();
+    router.replace("/connexion?espace=senior");
+  }
 
   /* ----- Son : le premier geste de l'utilisateur débloque l'audio du navigateur ----- */
   useEffect(() => {
@@ -585,13 +659,41 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
             <Bell className="h-7 w-7" />
             <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-danger-500" aria-hidden="true" />
           </button>
-          <button type="button" className="flex min-h-14 items-center gap-3 rounded-2xl px-2 hover:bg-brand-50">
-            <Portrait data={data} className="h-11 w-11" />
-            <span className="hidden text-lg font-bold text-ink sm:block">
-              {data.firstName} {data.lastName}
-            </span>
-            <ChevronDown className="hidden h-5 w-5 text-muted sm:block" aria-hidden="true" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              className="flex min-h-14 items-center gap-3 rounded-2xl px-2 hover:bg-brand-50"
+            >
+              <Portrait data={data} className="h-11 w-11" />
+              <span className="hidden text-lg font-bold text-ink sm:block">
+                {data.firstName} {data.lastName}
+              </span>
+              <ChevronDown className={cx("hidden h-5 w-5 text-muted transition-transform sm:block", menuOpen && "rotate-180")} aria-hidden="true" />
+            </button>
+
+            {/* Menu déroulant : un fond transparent ferme le menu au clic à l'extérieur */}
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+                <div role="menu" className="absolute right-0 z-40 mt-2 w-72 rounded-2xl border border-line bg-white p-2 shadow-pop">
+                  <p className="truncate px-4 py-3 text-lg font-bold text-ink">
+                    {data.firstName} {data.lastName}
+                  </p>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={logout}
+                    className="flex min-h-16 w-full items-center gap-3 rounded-xl px-4 text-[22px] font-bold text-danger-600 hover:bg-danger-50"
+                  >
+                    <LogOut className="h-7 w-7" aria-hidden="true" /> Se déconnecter
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -606,14 +708,10 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
                   <button
                     type="button"
                     onClick={() => {
-                      if (label === "Messages") router.push("/senior/messages");
-                      if (label === "Accueil") router.push("/senior/connexion-reussie");
-                      if (label === "Médicaments") router.push("/senior/medicaments");
-                      if (label === "Agenda") router.push("/senior/agenda");
-                      if (label === "Proches") setCallOpen(true);
-                      if (label === "Documents") {
-                        router.push("/senior/documents");
-                      }
+                      // « Proches » ouvre la même fenêtre de contacts que le raccourci « Mes proches »
+                      if (label === "Proches") return setCallOpen(true);
+                      const route = ROUTES[label];
+                      if (route) router.push(route);
                     }}
                     aria-current={active ? "page" : undefined}
                     className={cx(
@@ -628,11 +726,7 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
               );
             })}
           </ul>
-          <button type="button" onClick={() => {
-            assistant.stop(); tokenStore.clear();
-            for (const key of ["seniorId", "seniorFirstName", "seniorLastName", "seniorPhotoUrl"]) localStorage.removeItem(key);
-            router.replace("/connexion?espace=senior");
-          }} disabled={call.state !== "idle" || assistant.busy || assistant.listening} className="mt-auto flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold text-danger-600 hover:bg-danger-50 disabled:opacity-50">
+          <button type="button" onClick={logout} disabled={call.state !== "idle" || assistant.busy || assistant.listening} className="mt-auto flex min-h-16 w-full items-center gap-4 rounded-2xl px-4 text-[20px] font-bold text-danger-600 hover:bg-danger-50 disabled:opacity-50">
             <LogOut className="h-7 w-7" aria-hidden="true" /> Se déconnecter
           </button>
         </nav>
@@ -661,14 +755,13 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
                 key={label}
                 type="button"
                 onClick={() => {
-                  if (label === "Mes médicaments") router.push("/senior/medicaments");
-                  if (label === "Mon agenda") router.push("/senior/agenda");
-                  if (label === "Mes documents") {
-                    router.push("/senior/documents");
-                  }
+                  // « Mes proches » ouvre la fenêtre de contacts au lieu de naviguer
                   if (label === "Mes proches") {
                     setCallOpen(true);
+                    return;
                   }
+                  const route = ROUTES[label];
+                  if (route) router.push(route);
                 }}
                 className={cx("flex min-h-44 flex-col items-center justify-start gap-4 rounded-3xl border px-4 pb-5 pt-7 text-center shadow-card transition-shadow hover:shadow-pop", cardCls)}
               >
@@ -691,21 +784,22 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
           </button>
 
           {/* Prochaine prise */}
-          {data.prochainePrise && (
+          {prochainePrise && (
             <section aria-label="Prochaine prise" className="mt-6 flex flex-wrap items-center gap-5 rounded-3xl border border-line bg-white p-5 shadow-card sm:p-6">
               <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
                 <Pill className="h-8 w-8" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-lg font-bold text-muted">Prochaine prise</p>
-                <p className="text-[24px] font-extrabold text-ink">{data.prochainePrise.medicament}</p>
-                <p className="mt-0.5 flex items-center gap-2 text-lg font-semibold text-ok-600">
-                  <Clock className="h-5 w-5" aria-hidden="true" /> Aujourd&apos;hui à {data.prochainePrise.heure}
+                <p className="text-[24px] font-extrabold text-ink">{prochainePrise.medicament}</p>
+                <p className={cx("mt-0.5 flex items-center gap-2 text-lg font-semibold", prochainePrise.late ? "text-warn-600" : "text-ok-600")}>
+                  <Clock className="h-5 w-5" aria-hidden="true" />
+                  {prochainePrise.late ? `Prévue à ${prochainePrise.heure.replace(":", "h")}, pas encore confirmée` : `Aujourd'hui à ${prochainePrise.heure.replace(":", "h")}`}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setPriseConfirmee(true)}
+                onClick={confirmPrise}
                 disabled={priseConfirmee}
                 className={cx(
                   "flex min-h-16 w-full items-center justify-center gap-2 rounded-2xl px-7 text-[22px] font-extrabold transition-colors sm:w-auto",
@@ -737,6 +831,7 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
               if (label === "Accueil") router.push("/senior/connexion-reussie");
               if (label === "Médicaments") router.push("/senior/medicaments");
               if (label === "Agenda") router.push("/senior/agenda");
+              if (label === "Souvenirs") router.push("/senior/souvenirs");
             }}
             aria-current={label === view ? "page" : undefined}
             className={cx("flex min-h-20 flex-col items-center justify-center gap-1 text-sm font-bold", label === view ? "text-brand-700" : "text-ink")}
@@ -848,7 +943,7 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
             </div>
 
             <ul className="mt-6 space-y-3">
-              {(assistant.session?.contacts || []).map((c) => (
+              {contacts.map((c) => (
                 <li key={c.phone}>
                   <a
                     href={`tel:${c.phone}`}
@@ -865,7 +960,7 @@ function SeniorAccueil({ data, view }: { data: SeniorAccueilData; view: SeniorVi
                 </li>
               ))}
             </ul>
-            {!assistant.session?.contacts?.length && <p className="mt-5 text-[22px] text-ink">Aucun numéro de téléphone n’a été renseigné dans votre profil.</p>}
+            {!contacts.length && <p className="mt-5 text-[22px] text-ink">Aucun numéro de téléphone n’a été renseigné dans votre profil.</p>}
             <button type="button" disabled={call.state !== "idle" || !assistant.session} onClick={() => { setCallOpen(false); call.start(); }} className="mt-5 min-h-16 w-full rounded-2xl bg-brand-700 px-5 text-[22px] font-bold text-white disabled:opacity-50">Appeler mon aidant dans CareAI</button>
 
             <button

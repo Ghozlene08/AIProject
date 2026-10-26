@@ -88,17 +88,18 @@ function stopExplanation() {
     <main className="min-h-screen bg-canvas px-4 py-6">
       <div className="mx-auto w-full max-w-2xl">
 
-        {/* En-tête */}
-        <div className="relative flex items-center justify-center">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="absolute left-0 flex h-12 w-12 items-center justify-center rounded-full hover:bg-brand-50"
-            aria-label="Retour"
-          >
-            <ChevronLeft className="h-7 w-7 text-brand-900" />
-          </button>
+        {/* Retour au tableau de bord du senior (toujours le même, quelle que soit la page précédente).
+            « ?vue=accueil » ouvre directement l'accueil, sans rejouer « Visage reconnu avec succès ». */}
+        <button
+          type="button"
+          onClick={() => router.push("/senior/connexion-reussie?vue=accueil")}
+          className="flex min-h-16 items-center gap-2 rounded-2xl px-3 text-[22px] font-bold text-brand-700 hover:bg-brand-50"
+        >
+          <ChevronLeft className="h-7 w-7" aria-hidden="true" /> Accueil
+        </button>
 
+        {/* En-tête */}
+        <div className="mt-2 flex items-center justify-center">
           <h1 className="text-2xl font-black text-brand-900">
             Explication du document
           </h1>

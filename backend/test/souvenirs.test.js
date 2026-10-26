@@ -190,3 +190,63 @@ test("sans texte de l'aidant, le récit généré est recopié dans le formulair
   assert.ok(m.generated.recit.length > 0);
   assert.equal(m.story, m.generated.recit);
 });
+
+/* ---------- Côté senior : retrouver le souvenir demandé à voix haute ---------- */
+
+import { matchMemory } from "../src/services/souvenirs/titleMatcher.js";
+
+const list = [
+  { _id: "a", title: "Mariage de Marie et Ahmed", date: "été 1972", place: "Sousse", people: [{ name: "Ahmed" }, { name: "Leïla" }] },
+  { _id: "b", title: "Naissance de Karim", date: "1975", place: "Tunis", people: [{ name: "Karim" }, { name: "Ahmed" }] },
+  { _id: "c", title: "Vacances à Tabarka", date: "années 80", place: "Tabarka", people: [{ name: "Karim" }, { name: "Sophie" }] },
+];
+
+test("retrouve un souvenir à partir d'un mot du titre, même dans une phrase", () => {
+  assert.deepEqual(matchMemory("le mariage", list), { status: "trouve", memoryId: "a" });
+  assert.deepEqual(matchMemory("je veux écouter les vacances", list), { status: "trouve", memoryId: "c" });
+});
+
+test("tolère une petite faute de transcription et cherche aussi le lieu", () => {
+  assert.deepEqual(matchMemory("Tabarqa", list), { status: "trouve", memoryId: "c" });
+  assert.deepEqual(matchMemory("celui à Tunis", list), { status: "trouve", memoryId: "b" });
+});
+
+test("comprend « le premier », « le deuxième », « numéro trois »", () => {
+  assert.deepEqual(matchMemory("le premier", list), { status: "trouve", memoryId: "a" });
+  assert.deepEqual(matchMemory("le deuxième s'il te plaît", list), { status: "trouve", memoryId: "b" });
+  assert.deepEqual(matchMemory("numéro trois", list), { status: "trouve", memoryId: "c" });
+});
+
+test("signale une réponse ambiguë ou sans rapport", () => {
+  // Karim apparaît dans deux souvenirs
+  assert.deepEqual(matchMemory("celui avec Karim", list), { status: "ambigu", candidates: ["b", "c"] });
+  assert.deepEqual(matchMemory("la voiture rouge", list), { status: "aucun" });
+  assert.deepEqual(matchMemory("je veux écouter un souvenir", list), { status: "aucun" });
+});
+
+/* ---------- Quiz : jugement des réponses orales (sans IA) ---------- */
+
+import { classifyIntent, localVerdict } from "../src/services/souvenirs/answerEvaluator.js";
+
+test("une bonne réponse est reconnue, même dans une phrase ou avec une petite faute", () => {
+  assert.equal(localVerdict("À Sousse", "Sousse"), "correct");
+  assert.equal(localVerdict("c'était ma sœur Leïla", "Leïla"), "correct");
+  assert.equal(localVerdict("Leila", "Leïla"), "correct");
+  assert.equal(localVerdict("Tabarqa", "Tabarka"), "correct");
+  assert.equal(localVerdict("en 1972", "été 1972"), "correct");
+});
+
+test("une réponse proche ou différente n'est jamais « correcte »", () => {
+  assert.equal(localVerdict("1974", "été 1972"), "proche"); // à 2 ans près
+  assert.equal(localVerdict("Mariage", "Mariage de Marie et Ahmed avec Leïla"), "proche"); // en partie
+  assert.equal(localVerdict("Monastir", "Sousse"), "different");
+});
+
+test("comprend « je ne sais pas » et « passe », sans confondre avec une vraie réponse", () => {
+  assert.equal(classifyIntent("je ne sais pas"), "dontknow");
+  assert.equal(classifyIntent("je ne me souviens plus"), "dontknow");
+  assert.equal(classifyIntent("passe"), "skip");
+  assert.equal(classifyIntent("question suivante"), "skip");
+  assert.equal(classifyIntent("ça s'est passé à Sousse"), "answer");
+  assert.equal(classifyIntent("Leïla"), "answer");
+});

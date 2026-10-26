@@ -24,8 +24,6 @@ export interface Senior {
   city?: string;
   doctor?: { name?: string; specialty?: string; phone?: string };
   medicalNotes?: string;
-  pairingCode?: string;
-  pairedAt?: string;
   lastSeenAt?: string;
   consentAI?: boolean;
   createdAt: string;
@@ -62,7 +60,7 @@ export interface Intake {
   reminders: number;
 }
 
-export type EventType = "rdv" | "repas" | "activite" | "autre";
+export type EventType = "rdv" | "repas" | "activite" | "rappel" | "autre";
 
 export interface AgendaEvent {
   _id: string;
@@ -75,7 +73,17 @@ export interface AgendaEvent {
   status: "prevu" | "fait" | "annule";
 }
 
-export type AlertType = "prise_manquee" | "appel_manque" | "sos" | "checkin_manque" | "rdv" | "symptome" | "synthese" | "souvenir_enregistre" | "info";
+// Types d'alerte de toute l'équipe (identiques à l'énumération de backend/src/models/Alert.js)
+export type AlertType =
+  | "prise_manquee"
+  | "appel_manque"
+  | "sos"
+  | "checkin_manque"
+  | "rdv"
+  | "symptome"
+  | "synthese"
+  | "souvenir_enregistre"
+  | "info";
 
 export interface Alert {
   _id: string;

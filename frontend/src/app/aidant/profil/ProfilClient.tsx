@@ -1,37 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Pencil, Phone, Plus, ShieldAlert, Stethoscope, Trash2, UserRound, Users } from "lucide-react";
-import { api } from "@/lib/api";
+import { Pencil, ScanFace, Phone, Plus, ShieldAlert, Stethoscope, Trash2, UserRound, Users } from "lucide-react";
+import { api, assetUrl } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import type { Contact, Senior } from "@/lib/types";
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, Field, Input, Modal, PageHeader, Spinner, Toggle } from "@/components/ui";
 import { useCurrentSenior } from "../SeniorContext";
-import { EditSeniorModal, PairingResult } from "../SeniorForms";
+import { fmtRelative } from "@/lib/format";
+import { EditSeniorModal } from "../SeniorForms";
 
 export default function ProfilPage() {
   const { senior, base, reload: reloadSeniors } = useCurrentSenior();
   const { data, loading, reload } = useApi<{ senior: Senior; contacts: Contact[] }>(base);
   const [editing, setEditing] = useState(false);
   const [contact, setContact] = useState<Partial<Contact> | null>(null);
-  const [pairing, setPairing] = useState<{ code?: string; pin: string } | null>(null);
-  const [pairingLoading, setPairingLoading] = useState(false);
 
   if (loading && !data) return <Spinner />;
   const s = data?.senior ?? senior;
   const contacts = data?.contacts ?? [];
-
-  async function regenerate() {
-    if (!confirm("Générer un nouveau code ? L'appareil actuellement appairé devra être reconnecté.")) return;
-    setPairingLoading(true);
-    try {
-      const res = await api.post<{ senior: Senior; pin: string }>(`${base}/pairing`);
-      setPairing({ code: res.senior.pairingCode, pin: res.pin });
-      reload();
-    } finally {
-      setPairingLoading(false);
-    }
-  }
 
   async function removeContact(c: Contact) {
     if (!confirm(`Supprimer le contact ${c.name} ?`)) return;
@@ -51,7 +38,7 @@ export default function ProfilPage() {
     <div className="fade-up">
       <PageHeader
         title={`Profil de ${s.firstName} ${s.lastName}`}
-        subtitle="Informations personnelles, contacts et appairage de l'appareil"
+        subtitle="Informations personnelles, contacts et connexion par reconnaissance faciale"
         action={
           <Button onClick={() => setEditing(true)}>
             <Pencil className="h-4 w-4" /> Modifier
@@ -92,21 +79,28 @@ export default function ProfilPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Appairage de l'appareil" icon={<KeyRound className="h-5 w-5" />} subtitle="Connexion de l'interface Senior par code + PIN" />
+            <CardHeader title="Connexion par reconnaissance faciale" icon={<ScanFace className="h-5 w-5" />} subtitle="Le senior se connecte en regardant la caméra, sans code ni mot de passe" />
             <div className="flex flex-wrap items-center gap-4 px-5 pb-5">
-              <div className="rounded-xl bg-brand-50 px-5 py-3">
-                <p className="text-xs font-bold uppercase text-muted">Code d&apos;appairage</p>
-                <p className="font-mono text-2xl font-black tracking-widest text-brand-900">{s.pairingCode ?? "—"}</p>
+              {s.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={assetUrl(s.photoUrl)} alt={`Visage de ${s.firstName}`} className="h-16 w-16 rounded-full object-cover ring-2 ring-ok-500/40" />
+              ) : (
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-warn-50 text-warn-600">
+                  <ScanFace className="h-8 w-8" />
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                {s.photoUrl ? <Badge tone="ok">Visage enregistré</Badge> : <Badge tone="warn">Photo du visage manquante</Badge>}
+                <p className="mt-1 text-sm text-muted">
+                  {s.photoUrl
+                    ? s.lastSeenAt
+                      ? `Dernière connexion : ${fmtRelative(s.lastSeenAt)}`
+                      : "Pas encore de connexion"
+                    : "Ajoutez une photo claire du visage pour activer la connexion."}
+                </p>
               </div>
-              <div className="flex-1">
-                {s.pairedAt ? (
-                  <Badge tone="ok">Appairé le {new Date(s.pairedAt).toLocaleDateString("fr-FR")}</Badge>
-                ) : (
-                  <Badge tone="warn">En attente d&apos;appairage</Badge>
-                )}
-              </div>
-              <Button variant="outline" size="sm" onClick={regenerate} loading={pairingLoading}>
-                Nouveau code
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                {s.photoUrl ? "Changer la photo" : "Ajouter la photo"}
               </Button>
             </div>
           </Card>
@@ -167,9 +161,6 @@ export default function ProfilPage() {
         />
       )}
       {contact && <ContactModal base={base} contact={contact} onClose={() => setContact(null)} onSaved={reload} />}
-      <Modal open={Boolean(pairing)} onClose={() => setPairing(null)} title="Nouveau code d'appairage" footer={<Button onClick={() => setPairing(null)}>J&apos;ai noté les codes</Button>}>
-        {pairing && <PairingResult code={pairing.code} pin={pairing.pin} />}
-      </Modal>
     </div>
   );
 }

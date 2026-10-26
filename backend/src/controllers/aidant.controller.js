@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -26,12 +25,6 @@ const EVENT_FIELDS = ["title", "type", "startAt", "location", "notes", "status"]
 const ALERT_TYPES = ["appel_manque", "sos", "checkin_manque", "synthese", "info"]; // ← CHANGED
 const URGENT_TYPES = ["sos", "checkin_manque"]; // ← NEW : alertes qui ouvrent la popup d'urgence
 
-// Code d'appairage lisible (sans 0/O/1/I) + PIN à 4 chiffres
-const newPairingCode = () => {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from(crypto.randomBytes(6), (b) => alphabet[b % alphabet.length]).join("");
-};
-const newPin = () => String(crypto.randomInt(0, 10000)).padStart(4, "0");
 
 async function findOwned(Model, id, senior) {
   const doc = await Model.findOne({ _id: id, senior: senior._id }).catch(() => null);
@@ -68,23 +61,18 @@ export async function createSenior(req, res) {
     // multipart/form-data : doctor arrive en JSON texte, consentAI en "true"/"false"
     const body = parseSeniorBody(req.body);
     requireFields(body, ["firstName", "lastName"]);
-    const pin = newPin();
     const senior = new Senior({
       ...pick(body, SENIOR_FIELDS),
       photoUrl: photoUrlFor(req.file), // undefined si aucune photo envoyée
       caregivers: [req.user._id],
-      pairingCode: newPairingCode(),
-      pinHash: await bcrypt.hash(pin, 10),
     });
     await senior.validate();
     if (req.file) {
       const imageBuffer = await fs.promises.readFile(req.file.path);
       await registerSeniorFace(imageBuffer, senior._id.toString(), req.file.mimetype);
     }
-    // Une panne CompreFace ne doit pas créer de profil privé de son PIN/photo.
     await senior.save();
-    // Le PIN n'est montré qu'une fois, à l'aidant
-    res.status(201).json({ senior, pin });
+    res.status(201).json({ senior });
   } catch (err) {
     removeUploadedFile(req.file); // pas d'image orpheline si la création échoue
     throw err;
@@ -136,15 +124,6 @@ export async function updateSenior(req, res) {
     removeUploadedFile(req.file);
     throw err;
   }
-}
-
-export async function regeneratePairing(req, res) {
-  const pin = newPin();
-  req.senior.pairingCode = newPairingCode();
-  req.senior.pinHash = await bcrypt.hash(pin, 10);
-  req.senior.pairedAt = undefined;
-  await req.senior.save();
-  res.json({ senior: req.senior, pin });
 }
 
 /* ---------- Tableau de bord ---------- */

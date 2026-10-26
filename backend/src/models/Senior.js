@@ -17,10 +17,6 @@ const seniorSchema = new mongoose.Schema(
     medicalNotes: { type: String, trim: true },
     photoUrl: { type: String }, 
     caregivers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    // Appairage de l'interface Senior : code d'appairage + code PIN
-    pairingCode: { type: String, unique: true, sparse: true },
-    pinHash: { type: String, select: false },
-    pairedAt: Date,
     lastSeenAt: Date,
     consentAI: { type: Boolean, default: true },
   },
@@ -36,7 +32,6 @@ seniorSchema.virtual("age").get(function age() {
 seniorSchema.set("toJSON", {
   virtuals: true,
   transform: (_doc, ret) => {
-    delete ret.pinHash;
     delete ret.__v;
     delete ret.id;
     return ret;

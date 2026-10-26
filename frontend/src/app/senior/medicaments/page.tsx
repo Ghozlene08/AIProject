@@ -1,7 +1,9 @@
-import { ConnexionReussie } from "../connexion-reussie/ConnexionReussie";
+import type { Metadata } from "next";
+import { SeniorMedicamentsApp } from "./SeniorMedicamentsApp";
 
-export const metadata = { title: "Mes médicaments" };
-export const instant = false;
-export default function MedicationsPage() {
-  return <ConnexionReussie initialView="Médicaments" redirectMs={0} />;
+export const metadata: Metadata = { title: "Mes médicaments" };
+
+// Module F2 : traitements du senior et prises du jour (saisis par l'aidant)
+export default function SeniorMedicamentsPage() {
+  return <SeniorMedicamentsApp />;
 }

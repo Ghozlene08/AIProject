@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, Pill, Clock } from "lucide-react";
-import { API_URL, tokenStore } from "@/lib/api";
+import { API_URL } from "@/lib/api";
+import { seniorToken as tokenStore } from "@/lib/senior/api";
 
 type Medication = { _id: string; name: string; dosage?: string; posology?: string; times: string[]; instructions?: string };
 type Appointment = { _id: string; title: string; startAt: string; location?: string; notes?: string };
