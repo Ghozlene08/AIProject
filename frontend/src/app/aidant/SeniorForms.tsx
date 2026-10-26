@@ -1,12 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, HeartHandshake, KeyRound, Trash2, User, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { HeartHandshake, KeyRound, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Senior } from "@/lib/types";
 import { Button, Card, ErrorBox, Field, Input, Modal, Textarea } from "@/components/ui";
 import { useSenior } from "./SeniorContext";
+
+/* ------------------------------------------------------------------ */
+/* Photo constraints                                                   */
+/* ------------------------------------------------------------------ */
+
+// URL publique de l'API (sans /api) pour afficher les images servies par le backend
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/api\/?$/, "").replace(/\/$/, "");
+const assetUrl = (path?: string) => (!path ? "" : /^https?:\/\//.test(path) ? path : `${API_ORIGIN}${path}`);
+
+const MAX_PHOTO_MB = 2;
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/* ------------------------------------------------------------------ */
+/* Form state                                                          */
+/* ------------------------------------------------------------------ */
 
 type FormState = {
   firstName: string;
@@ -19,6 +34,10 @@ type FormState = {
   doctorSpecialty: string;
   doctorPhone: string;
   medicalNotes: string;
+  // Photo
+  photoFile: File | null; // newly chosen file
+  photoUrl: string; // existing photo already stored on the server
+  removePhoto: boolean; // user asked to delete the existing photo
 };
 
 const toForm = (s?: Senior | null): FormState => ({
@@ -32,23 +51,116 @@ const toForm = (s?: Senior | null): FormState => ({
   doctorSpecialty: s?.doctor?.specialty ?? "",
   doctorPhone: s?.doctor?.phone ?? "",
   medicalNotes: s?.medicalNotes ?? "",
+  photoFile: null,
+  photoUrl: s?.photoUrl ?? "",
+  removePhoto: false,
 });
 
-const toPayload = (f: FormState) => ({
-  firstName: f.firstName,
-  lastName: f.lastName,
-  birthDate: f.birthDate || undefined,
-  phone: f.phone,
-  address: f.address,
-  city: f.city,
-  doctor: { name: f.doctorName, specialty: f.doctorSpecialty, phone: f.doctorPhone },
-  medicalNotes: f.medicalNotes,
-});
+/** Sends multipart/form-data so the image and the fields travel in one request. */
+const toFormData = (f: FormState) => {
+  const fd = new FormData();
+  fd.append("firstName", f.firstName);
+  fd.append("lastName", f.lastName);
+  if (f.birthDate) fd.append("birthDate", f.birthDate);
+  fd.append("phone", f.phone);
+  fd.append("address", f.address);
+  fd.append("city", f.city);
+  // multipart can't nest objects: send the doctor as JSON and parse it on the server
+  fd.append("doctor", JSON.stringify({ name: f.doctorName, specialty: f.doctorSpecialty, phone: f.doctorPhone }));
+  fd.append("medicalNotes", f.medicalNotes);
+  if (f.photoFile) fd.append("photo", f.photoFile);
+  if (f.removePhoto && !f.photoFile) fd.append("removePhoto", "true");
+  return fd;
+};
+
+/* ------------------------------------------------------------------ */
+/* Photo field                                                         */
+/* ------------------------------------------------------------------ */
+
+function PhotoField({ form, setForm }: { form: FormState; setForm: (f: FormState) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
+
+  // Local preview of the chosen file (revoked on change/unmount to avoid leaks)
+  const preview = useMemo(() => (form.photoFile ? URL.createObjectURL(form.photoFile) : ""), [form.photoFile]);
+  useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview]);
+
+  const shown = preview || (form.removePhoto ? "" : assetUrl(form.photoUrl));
+
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allows re-selecting the same file later
+    if (!file) return;
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setError("Format non pris en charge. Utilisez une image JPG, PNG ou WebP.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_MB * 1024 * 1024) {
+      setError(`L'image est trop lourde (maximum ${MAX_PHOTO_MB} Mo).`);
+      return;
+    }
+    setError("");
+    setForm({ ...form, photoFile: file, removePhoto: false });
+  }
+
+  function onRemove() {
+    setError("");
+    setForm({ ...form, photoFile: null, removePhoto: !!form.photoUrl });
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-5">
+      <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-brand-50 text-brand-400">
+        {shown ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shown} alt="Photo du proche" className="h-full w-full object-cover" />
+        ) : (
+          <User className="h-10 w-10" aria-hidden />
+        )}
+      </div>
+
+      <div className="text-center sm:text-left">
+        <p className="text-sm font-bold text-brand-900">Photo de profil</p>
+        <p className="text-xs text-muted">JPG, PNG ou WebP, {MAX_PHOTO_MB} Mo maximum.</p>
+
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPTED_TYPES.join(",")}
+            onChange={onPick}
+            className="sr-only"
+            aria-label="Choisir une photo de profil"
+          />
+          <Button type="button" variant="ghost" onClick={() => inputRef.current?.click()}>
+            <Camera className="h-4 w-4" /> {shown ? "Changer la photo" : "Ajouter une photo"}
+          </Button>
+          {shown && (
+            <Button type="button" variant="ghost" onClick={onRemove}>
+              <Trash2 className="h-4 w-4" /> Retirer
+            </Button>
+          )}
+        </div>
+
+        {error && (
+          <p role="alert" className="mt-2 text-sm font-semibold text-danger-600">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Fields                                                              */
+/* ------------------------------------------------------------------ */
 
 function SeniorFields({ form, setForm }: { form: FormState; setForm: (f: FormState) => void }) {
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
   return (
     <div className="space-y-4">
+      <PhotoField form={form} setForm={setForm} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Prénom">{(id) => <Input id={id} required value={form.firstName} onChange={set("firstName")} />}</Field>
         <Field label="Nom">{(id) => <Input id={id} required value={form.lastName} onChange={set("lastName")} />}</Field>
@@ -92,6 +204,10 @@ export function PairingResult({ code, pin }: { code?: string; pin: string }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Create flow                                                         */
+/* ------------------------------------------------------------------ */
+
 function useCreateSenior(onDone?: () => void) {
   const { reload, select } = useSenior();
   const [form, setForm] = useState<FormState>(toForm());
@@ -104,7 +220,7 @@ function useCreateSenior(onDone?: () => void) {
     setSaving(true);
     setError("");
     try {
-      const res = await api.post<{ senior: Senior; pin: string }>("/aidant/seniors", toPayload(form));
+      const res = await api.post<{ senior: Senior; pin: string }>("/aidant/seniors", toFormData(form));
       setResult(res);
     } catch (err) {
       setError((err as Error).message);
@@ -194,6 +310,10 @@ export function CreateSeniorModal({ open, onClose }: { open: boolean; onClose: (
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Edit flow                                                           */
+/* ------------------------------------------------------------------ */
+
 export function EditSeniorModal({ open, onClose, senior, onSaved }: { open: boolean; onClose: () => void; senior: Senior; onSaved: () => void }) {
   const [form, setForm] = useState<FormState>(() => toForm(senior));
   const [error, setError] = useState("");
@@ -203,7 +323,7 @@ export function EditSeniorModal({ open, onClose, senior, onSaved }: { open: bool
     setSaving(true);
     setError("");
     try {
-      await api.put(`/aidant/seniors/${senior._id}`, toPayload(form));
+      await api.put(`/aidant/seniors/${senior._id}`, toFormData(form));
       onSaved();
       onClose();
     } catch (err) {

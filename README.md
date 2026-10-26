@@ -1,5 +1,9 @@
 # Senior Assistant
 
+**F1 — Tasnim Chtila** : assistant vocal à mémoire réintégré au micro Senior et au menu **Messages** (`/senior/messages`). Chaîne Whisper Groq → LLM avec contexte et mémoire autorisée → Edge TTS, avec secours navigateur. Configuration, fichiers et essais : [guide F1](F1-TASNIM.md).
+
+L’assistant comprend aussi les demandes d’ouverture des médicaments, de l’agenda et des autres rubriques disponibles. Il consulte la météo d’aujourd’hui ou de demain via Open-Meteo, avec ville précisée ou issue du profil, source et date affichées. La demande d’un rappel de médicament ouvre les horaires existants ; leur création/modification reste assurée par l’aidant.
+
 Application web d'assistance vocale intelligente pour l'autonomie des personnes âgées — ESPRIT, atelier mini-projet « IA for Software Engineering » (groupe CareAI).
 
 - **Frontend** : Next.js 16 (React 19, TypeScript, Tailwind CSS 4)

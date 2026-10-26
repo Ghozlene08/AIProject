@@ -21,10 +21,8 @@ export async function generateText({ task, system, prompt, names = [], seniorId,
   const preview = storePromptPreview && settings.privacy.storePromptPreview ? safePrompt.slice(0, 600) : undefined;
   let attempt = 0;
 
-  const candidates = providers.flatMap((provider) => {
-    const override = models[provider.key];
-    return override ? [override].flat().map((model) => ({ ...(provider.toObject?.() || provider), model })) : [provider];
-  });
+  const candidates = providers.flatMap((provider) => models[provider.key]
+    ? [models[provider.key]].flat().map((model) => ({ ...(provider.toObject?.() || provider), model })) : [provider]);
   for (const provider of candidates) {
     const caller = LLM_CALLERS[provider.key];
     if (!caller) continue;

@@ -1,4 +1,5 @@
 import express from "express";
+import path from "node:path";
 import cors from "cors";
 import routes from "./routes/index.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error.js";
@@ -12,6 +13,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:3000", creden
 // Permet de lire le JSON envoyé dans les requêtes
 app.use(express.json({ limit: "1mb" }));
 
+app.use("/uploads", express.static(path.resolve("uploads")));
 // Toutes les routes de l'API sont préfixées par /api
 app.use("/api", routes);
 

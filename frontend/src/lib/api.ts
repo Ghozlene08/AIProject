@@ -22,15 +22,20 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const token = tokenStore.get();
+
+  // Un FormData (upload de fichier) doit partir tel quel : pas de JSON.stringify
+  // et surtout pas de Content-Type, le navigateur ajoute lui-même "multipart/form-data; boundary=..."
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method,
       headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, "Le serveur est injoignable. Vérifiez que le backend est démarré.");
@@ -54,6 +59,7 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body ?? {}),
   del: (path: string) => request<void>("DELETE", path),
+  
 };
 
 export const qs = (params: Record<string, string | number | boolean | undefined | null>) => {

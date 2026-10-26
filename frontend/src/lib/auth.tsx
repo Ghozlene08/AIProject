@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, tokenStore } from "./api";
+import { decodeToken } from "./token";
 import type { Role, User } from "./types";
 
 interface AuthState {
@@ -23,7 +24,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const restore = async () => {
-      if (!tokenStore.get()) return setLoading(false);
+      const token = tokenStore.get();
+      if (!token) return setLoading(false);
+      // La session faciale Senior est vérifiée par ses API dédiées, pas /auth/me (aidant).
+      if (decodeToken(token)?.role === "senior") return setLoading(false);
       try {
         const { user } = await api.get<{ user: User }>("/auth/me");
         if (!cancelled) setUser(user);

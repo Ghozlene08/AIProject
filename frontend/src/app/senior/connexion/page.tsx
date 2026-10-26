@@ -1,4 +1,6 @@
-import { SeniorLogin } from "../SeniorLogin";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Connexion Senior" };
-export default function SeniorConnectionPage() { return <SeniorLogin />; }
+export default function SeniorConnectionPage() {
+  redirect("/connexion?espace=senior");
+}
