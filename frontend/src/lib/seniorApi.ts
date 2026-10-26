@@ -89,3 +89,35 @@ export interface Reminder {
   detail: string;
   speech: string;
 }
+
+export interface SeniorContact {
+  id: string;
+  name: string;
+  relation: string;
+  phone: string;
+  isEmergency: boolean;
+}
+
+export interface TodayIntake {
+  id: string;
+  time: string;
+  at: string;
+  status: "a_venir" | "confirme" | "manque";
+}
+
+export interface SeniorMedication {
+  id: string;
+  name: string;
+  dosage: string | null;
+  posology: string | null;
+  instructions: string | null;
+  times: string[];
+  today: TodayIntake[];
+}
+
+export interface NextIntake {
+  id: string;
+  time: string;
+  name: string;
+  late: boolean;
+}

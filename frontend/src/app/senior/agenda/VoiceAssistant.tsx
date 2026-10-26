@@ -6,6 +6,7 @@ import { cx } from "@/components/ui";
 import { speak, stopSpeaking, useVoiceCapture, type Capture } from "@/components/senior/voice";
 import { type Proposal, type VoiceResponse, seniorApi } from "@/lib/seniorApi";
 import { playListenStart, playListenStop } from "@/lib/senior/sounds";
+import { saysNo, saysYes } from "@/lib/senior/replies";
 
 type Phase = "listening" | "thinking" | "speaking" | "idle";
 type Pending = { kind: "confirmation"; proposal: Proposal } | { kind: "clarification"; context: NonNullable<VoiceResponse["context"]> } | null;
@@ -13,6 +14,17 @@ interface Message {
   role: "user" | "assistant";
   text: string;
 }
+
+// Après 2 incompréhensions de suite, l'assistant cesse d'écouter tout seul (pas de boucle sans fin)
+const MAX_AUTO_RETRIES = 2;
+
+// Pendant une confirmation : une phrase longue qui contient une demande d'agenda est une NOUVELLE
+// demande, même si elle commence par « non » (« Non, rappelle-moi plutôt… ») ; sinon c'est un oui / non
+const REQUEST_WORDS = /rappel|rendez|\bnote|ajoute|programme|prevu|agenda|medicament|demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d|heure|midi/;
+const isNewRequest = (text: string) => {
+  const t = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return t.trim().split(/\s+/).length > 4 && REQUEST_WORDS.test(t);
+};
 
 const SUGGESTIONS = ["Qu'ai-je prévu aujourd'hui ?", "Rappelle-moi de prendre mon médicament à 20 heures", "Qu'est-ce que j'ai demain ?"];
 
@@ -22,7 +34,7 @@ const SUGGESTIONS = ["Qu'ai-je prévu aujourd'hui ?", "Rappelle-moi de prendre m
  * → réponse lue à voix haute. Après une question de l'assistant, l'écoute reprend automatiquement.
  */
 export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => void; onAgendaChange: () => void }) {
-  const { listen, stop, level, interim } = useVoiceCapture();
+  const { listen, stop, release, level, interim } = useVoiceCapture();
   const [phase, setPhase] = useState<Phase>("idle");
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Je vous écoute. Dites par exemple : « Rappelle-moi d'appeler ma fille demain à 10 heures »." },
@@ -33,6 +45,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
   const pendingRef = useRef<Pending>(null);
   const closed = useRef(false);
   const started = useRef(false);
+  const retries = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const say = (text: string) => setMessages((m) => [...m, { role: "assistant", text }]);
@@ -59,12 +72,22 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
   async function handle(text: string, stt: string) {
     setMessages((m) => [...m, { role: "user", text }]);
     setPhase("thinking");
-    const p = pendingRef.current;
+    let p = pendingRef.current;
+    // Pendant une confirmation, une nouvelle demande complète remplace la précédente
+    // (« Non, plutôt à 11 heures » reste un « non » ; « Rappelle-moi plutôt… » est une nouvelle demande)
+    if (p?.kind === "confirmation" && isNewRequest(text)) {
+      p = null;
+      pendingRef.current = null;
+      setPending(null);
+    }
     let res: VoiceResponse;
     try {
       res =
         p?.kind === "confirmation"
-          ? await seniorApi.post<VoiceResponse>("/voice/confirm", { proposal: p.proposal, answer: text })
+          ? await seniorApi.post<VoiceResponse>("/voice/confirm", {
+              proposal: p.proposal,
+              ...(saysYes(text) ? { confirmed: true } : saysNo(text) ? { confirmed: false } : { answer: text }),
+            })
           : await seniorApi.post<VoiceResponse>("/voice/agenda", { text, stt, context: p?.kind === "clarification" ? p.context : undefined });
     } catch (err) {
       say((err as Error).message);
@@ -81,6 +104,9 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
         : res.status === "clarification" && res.context
           ? { kind: "clarification", context: res.context }
           : null;
+    // Même question reposée (réponse incomprise) : on compte ; nouvelle étape : on repart de zéro
+    const sameQuestion = next?.kind === "confirmation" && pendingRef.current?.kind === "confirmation";
+    retries.current = sameQuestion ? retries.current + 1 : 0;
     pendingRef.current = next;
     setPending(next);
     say(res.speech);
@@ -88,8 +114,8 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
     setPhase("speaking");
     await speak(res.speech);
     if (closed.current) return;
-    // Une question a été posée : on écoute la réponse
-    if (next && !typing) turn();
+    // Une question a été posée : on écoute la réponse… sauf après 2 incompréhensions de suite
+    if (next && !typing && retries.current < MAX_AUTO_RETRIES) turn();
     else setPhase("idle");
   }
 
@@ -137,17 +163,21 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
   }
 
   // L'écoute démarre à l'ouverture (une seule fois, même en mode strict de React)
+  // (le drapeau n'est posé qu'au moment du démarrage effectif : en développement, React monte
+  // les effets deux fois et annule le premier minuteur — l'écoute doit quand même démarrer)
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    const t = window.setTimeout(() => turn(), 0);
+    const t = window.setTimeout(() => {
+      if (started.current) return;
+      started.current = true;
+      turn();
+    }, 0);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function close() {
     closed.current = true;
-    stop();
+    release(); // libère le micro (le voyant du navigateur s'éteint)
     stopSpeaking();
     onClose();
   }
@@ -165,7 +195,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
     listening: "Je vous écoute…",
     thinking: "Je réfléchis…",
     speaking: "Je vous réponds…",
-    idle: pending ? "Répondez-moi" : "Appuyez sur le micro pour parler",
+    idle: pending?.kind === "confirmation" ? "Touchez « Oui » ou « Non »" : pending ? "Appuyez sur le micro pour répondre" : "Appuyez sur le micro pour parler",
   }[phase];
 
   return (
@@ -184,7 +214,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
             key={i}
             className={cx(
               "max-w-[85%] rounded-3xl px-5 py-4 text-[22px] leading-snug",
-              m.role === "assistant" ? "rounded-bl-md bg-white text-ink shadow-card" : "ml-auto rounded-br-md bg-brand-600 text-white",
+              m.role === "assistant" ? "rounded-bl-md bg-white text-ink shadow-card" : "ml-auto rounded-br-md bg-brand-800 text-white",
             )}
           >
             {m.text}
@@ -197,7 +227,7 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
       <div className="mx-auto w-full max-w-2xl px-4 pb-6">
         {pending?.kind === "confirmation" && (
           <div className="mb-4 grid grid-cols-2 gap-3">
-            <button onClick={() => answer(true)} className="flex min-h-20 items-center justify-center gap-2 rounded-3xl bg-ok-500 text-[26px] font-extrabold text-white hover:bg-ok-600">
+            <button onClick={() => answer(true)} className="flex min-h-20 items-center justify-center gap-2 rounded-3xl bg-ok-700 text-[26px] font-extrabold text-white hover:brightness-90">
               <Check className="h-8 w-8" strokeWidth={3} /> Oui, c&apos;est ça
             </button>
             <button onClick={() => answer(false)} className="flex min-h-20 items-center justify-center gap-2 rounded-3xl border-2 border-line bg-white text-[26px] font-extrabold text-ink hover:bg-canvas">
@@ -214,12 +244,12 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
             className="relative flex h-32 w-32 items-center justify-center rounded-full disabled:opacity-70"
           >
             <span className="absolute inset-0 rounded-full bg-brand-200 transition-transform duration-100" style={{ transform: `scale(${1 + (phase === "listening" ? level * 0.45 : 0)})` }} aria-hidden="true" />
-            <span className={cx("relative z-10 flex h-28 w-28 items-center justify-center rounded-full text-white shadow-xl", phase === "listening" ? "bg-danger-500" : "bg-gradient-to-br from-brand-500 to-brand-700")}>
+            <span className={cx("relative z-10 flex h-28 w-28 items-center justify-center rounded-full text-white shadow-xl", phase === "listening" ? "bg-danger-700" : "bg-gradient-to-br from-brand-700 to-brand-900")}>
               {phase === "thinking" ? <Loader2 className="h-14 w-14 animate-spin" /> : <Mic className="h-14 w-14" />}
             </span>
           </button>
-          <p className="mt-3 text-[24px] font-extrabold text-brand-700">{status}</p>
-          {phase === "listening" && <p className="text-[19px] text-muted">Je m&apos;arrête quand vous avez fini de parler.</p>}
+          <p className="mt-3 text-[24px] font-extrabold text-brand-800">{status}</p>
+          {phase === "listening" && <p className="text-[19px] text-ink-soft">Je m&apos;arrête quand vous avez fini de parler.</p>}
         </div>
 
         {/* Saisie écrite : secours si le micro n'est pas disponible */}
@@ -232,19 +262,19 @@ export function VoiceAssistant({ onClose, onAgendaChange }: { onClose: () => voi
               aria-label="Écrire votre demande"
               className="h-16 min-w-0 flex-1 rounded-2xl border-2 border-line bg-white px-4 text-[22px] text-ink focus:border-brand-400 focus:outline-none"
             />
-            <button className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white" aria-label="Envoyer">
+            <button className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-800 text-white" aria-label="Envoyer">
               <Send className="h-7 w-7" />
             </button>
           </form>
         ) : (
-          <button onClick={() => setTyping(true)} className="mx-auto mt-3 flex min-h-14 items-center gap-2 rounded-2xl px-4 text-[19px] font-bold text-muted hover:bg-white">
+          <button onClick={() => setTyping(true)} className="mx-auto mt-3 flex min-h-14 items-center gap-2 rounded-2xl px-4 text-[19px] font-bold text-ink-soft hover:bg-white">
             <Keyboard className="h-6 w-6" /> Écrire plutôt
           </button>
         )}
         {typing && !pending && (
           <div className="mt-3 flex flex-wrap gap-2">
             {SUGGESTIONS.map((s) => (
-              <button key={s} onClick={() => handle(s, "texte")} disabled={phase === "thinking"} className="min-h-14 rounded-2xl bg-white px-4 text-left text-[18px] font-semibold text-brand-700 shadow-card hover:bg-brand-50">
+              <button key={s} onClick={() => handle(s, "texte")} disabled={phase === "thinking"} className="min-h-14 rounded-2xl bg-white px-4 text-left text-[18px] font-semibold text-brand-800 shadow-card hover:bg-brand-50">
                 {s}
               </button>
             ))}

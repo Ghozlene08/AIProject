@@ -1,4 +1,4 @@
-import { Event, Intake } from "../models/index.js";
+import { Contact, Event, Intake, Medication, User } from "../models/index.js";
 import { badRequest, forbidden, notFound, requireFields } from "../utils/httpError.js";
 import { trackEvent } from "../services/tracking.js";
 // Reconnaissance vocale : route commune de l'équipe POST /api/senior/stt (senior/senior.controller.js)
@@ -17,6 +17,57 @@ const lowerFirst = (s) => toSecondPerson(s.charAt(0).toLowerCase() + s.slice(1))
 export async function me(req, res) {
   const s = req.senior;
   res.json({ senior: { _id: s._id, firstName: s.firstName, lastName: s.lastName } });
+}
+
+/* ---------- Proches : aidants, contacts saisis par l'aidant, médecin traitant ---------- */
+
+export async function contacts(req, res) {
+  const s = req.senior;
+  const [caregivers, saved] = await Promise.all([
+    User.find({ _id: { $in: s.caregivers ?? [] }, status: "actif", phone: { $nin: [null, ""] } }).select("name phone"),
+    Contact.find({ senior: s._id }).sort({ order: 1, createdAt: 1 }),
+  ]);
+  const list = [
+    ...caregivers.map((u) => ({ id: String(u._id), name: u.name, relation: "Mon aidant", phone: u.phone, isEmergency: false })),
+    ...saved.map((c) => ({ id: String(c._id), name: c.name, relation: c.relation ?? "", phone: c.phone, isEmergency: c.isEmergency })),
+  ];
+  if (s.doctor?.phone) list.push({ id: "medecin", name: s.doctor.name || "Mon médecin", relation: s.doctor.specialty ? `Médecin, ${s.doctor.specialty}` : "Médecin traitant", phone: s.doctor.phone, isEmergency: false });
+  // Un même numéro n'apparaît qu'une fois
+  const seen = new Set();
+  res.json({ contacts: list.filter((c) => !seen.has(c.phone.replace(/\s/g, "")) && seen.add(c.phone.replace(/\s/g, ""))) });
+}
+
+/* ---------- Médicaments : traitements actifs et prises du jour ---------- */
+
+export async function medications(req, res) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start.getTime() + 86400000 - 1);
+  const [meds, intakes] = await Promise.all([
+    Medication.find({ senior: req.senior._id, active: true }).sort({ name: 1 }),
+    Intake.find({ senior: req.senior._id, scheduledAt: { $gte: start, $lte: end } }).sort({ scheduledAt: 1 }),
+  ]);
+  const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const today = intakes.map((i) => ({ id: String(i._id), medication: String(i.medication), time: hhmm(i.scheduledAt), at: i.scheduledAt, status: i.status }));
+  const items = meds.map((m) => ({
+    id: String(m._id),
+    name: m.name,
+    dosage: m.dosage ?? null,
+    posology: m.posology ?? null,
+    instructions: m.instructions ?? null,
+    times: m.times,
+    today: today.filter((t) => t.medication === String(m._id)),
+  }));
+  // Dans l'ordre de la journée (premier horaire), plus naturel que l'ordre alphabétique
+  const first = (m) => [...m.times].sort()[0] ?? "99:99";
+  items.sort((a, b) => first(a).localeCompare(first(b)));
+  // Prochaine prise : la première non confirmée de la journée (en retard comprise)
+  const pending = today.find((t) => t.status !== "confirme" && t.at >= new Date(now.getTime() - 3 * 3600000));
+  const med = pending && meds.find((m) => String(m._id) === pending.medication);
+  res.json({
+    medications: items,
+    next: pending ? { id: pending.id, time: pending.time, name: [med?.name, med?.dosage].filter(Boolean).join(" "), late: pending.at < now } : null,
+  });
 }
 
 /* ---------- Agenda ---------- */
@@ -52,9 +103,18 @@ function checkProposal(p) {
   return { title: p.title.trim().slice(0, 80), startAt: at, type: ["rdv", "repas", "rappel"].includes(p.type) ? p.type : "rappel" };
 }
 
+// Même intitulé (sans tenir compte des majuscules ni des accents) à la même heure : pas de doublon
+const sameTitle = (a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }) === 0;
+async function findDuplicate(seniorId, { title, startAt }) {
+  const events = await Event.find({ senior: seniorId, status: "prevu", startAt });
+  return events.find((e) => sameTitle(e.title.trim(), title.trim())) ?? null;
+}
+
 // Rappel ajouté à l'écran (bouton « + »)
 export async function createEvent(req, res) {
   const data = checkProposal(req.body);
+  const existing = await findDuplicate(req.senior._id, data);
+  if (existing) return res.json({ event: existing, duplicate: true });
   const event = await Event.create({ ...data, senior: req.senior._id, createdBy: "senior" });
   trackEvent({ senior: req.senior._id, actor: "senior", module: "agenda", action: "rappel_cree", channel: "ecran" });
   res.status(201).json({ event });
@@ -104,7 +164,7 @@ export async function dueReminders(req, res) {
         time: hhmm(e.startAt),
         title: e.type === "rdv" ? "Rendez-vous" : "Petit rappel",
         detail: e.title,
-        speech: e.type === "rdv" ? `Rappel : ${lowerFirst(e.title)}${e.location ? `, ${e.location.replace(/s+[—–-]s+/g, ", ")}` : ""}, à ${speakTime(hhmm(e.startAt))}.` : `Vous m'avez demandé de vous rappeler : ${lowerFirst(e.title)}.`,
+        speech: e.type === "rdv" ? `Rappel : ${lowerFirst(e.title)}${e.location ? `, ${e.location.replace(/\s+[—–-]\s+/g, ", ")}` : ""}, à ${speakTime(hhmm(e.startAt))}.` : `Vous m'avez demandé de vous rappeler : ${lowerFirst(e.title)}.`,
       })),
     ],
   });
@@ -186,6 +246,9 @@ export async function voiceAgenda(req, res) {
       return res.json({ status: "clarification", intent: r.intent, context: pending, speech: `${speakTime(r.time).charAt(0).toUpperCase() + speakTime(r.time).slice(1)}, c'est déjà passé. À quelle heure voulez-vous ce rappel ?` });
     }
     const proposal = { title: r.title, date: r.date, time: r.time, type: r.type };
+    if (await findDuplicate(req.senior._id, { title: r.title, startAt: fromISO(r.date, r.time) })) {
+      return res.json({ status: "answer", intent: r.intent, speech: `C'est déjà dans votre agenda : ${lowerFirst(r.title)}, ${speakDay(r.date)} à ${speakTime(r.time)}. Je vous le rappellerai.`, source: r.source });
+    }
     return res.json({ status: "confirmation", intent: r.intent, proposal, speech: proposalSpeech(proposal), source: r.source });
   }
 
@@ -212,7 +275,8 @@ export async function voiceConfirm(req, res) {
     return res.json({ status: "answer", speech: "D'accord, j'annule. Vous pouvez me redemander quand vous voulez." });
   }
   const data = checkProposal(proposal);
-  const event = await Event.create({ ...data, senior: req.senior._id, createdBy: "senior" });
+  // « Oui » répété (double envoi, réseau lent) : on ne crée pas deux fois le même rappel
+  const event = (await findDuplicate(req.senior._id, data)) ?? (await Event.create({ ...data, senior: req.senior._id, createdBy: "senior" }));
   track({ step: 4, outcome: "reussi" });
   const when = `${speakDay(proposal.date)} à ${speakTime(proposal.time)}`;
   res.status(201).json({

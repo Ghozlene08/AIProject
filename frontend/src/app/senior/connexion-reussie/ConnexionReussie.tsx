@@ -33,6 +33,7 @@ import { cx } from "@/components/ui";
 import { assetUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { clearSeniorSession } from "@/lib/senior/api";
+import { type NextIntake, type SeniorContact, SeniorApiError, seniorApi, seniorToken } from "@/lib/seniorApi";
 import { disconnectSocket } from "@/lib/socket";
 import { useCaregiverCall } from "@/lib/useCaregiverCall";
 import { formatDuration } from "@/lib/rtc";
@@ -311,6 +312,8 @@ const MOBILE_NAV: { label: string; icon: LucideIcon }[] = [
 const ROUTES: Record<string, string> = {
   Agenda: "/senior/agenda",
   "Mon agenda": "/senior/agenda",
+  Médicaments: "/senior/medicaments",
+  "Mes médicaments": "/senior/medicaments",
   Documents: "/senior/documents",
   "Mes documents": "/senior/documents",
   // Module F4 — Souvenirs
@@ -344,6 +347,39 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
 
   // Fenêtre « Mes proches » (liste de contacts téléphoniques)
   const [callOpen, setCallOpen] = useState(false);
+
+  // Vraies données du senior (API de l'espace Senior) : proches saisis par l'aidant et prochaine prise
+  const [contacts, setContacts] = useState<CallContact[]>(CONTACTS);
+  // undefined : chargement en cours ; "demo" : aucune session (données de démonstration)
+  const [nextIntake, setNextIntake] = useState<NextIntake | null | undefined | "demo">(undefined);
+  useEffect(() => {
+    if (!seniorToken.get()) {
+      const t = window.setTimeout(() => setNextIntake("demo"), 0);
+      return () => window.clearTimeout(t);
+    }
+    seniorApi
+      .get<{ contacts: SeniorContact[] }>("/contacts")
+      .then((r) => r.contacts.length && setContacts(r.contacts))
+      .catch(() => {});
+    seniorApi
+      .get<{ next: NextIntake | null }>("/medications")
+      .then((r) => setNextIntake(r.next))
+      .catch(() => {});
+  }, []);
+  const prochainePrise = nextIntake === "demo" ? data.prochainePrise : nextIntake ? { medicament: nextIntake.name, heure: nextIntake.time } : null;
+
+  async function confirmPrise() {
+    if (nextIntake && nextIntake !== "demo") {
+      try {
+        const res = await seniorApi.post<{ speech: string }>(`/intakes/${nextIntake.id}/confirm`);
+        speak(res.speech);
+      } catch (err) {
+        if (err instanceof SeniorApiError) speak(err.message);
+        return;
+      }
+    }
+    setPriseConfirmee(true);
+  }
 
   // Appel vocal vers l'aidant (WebRTC)
   const call = useCaregiverCall();
@@ -668,6 +704,8 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
                   <button
                     type="button"
                     onClick={() => {
+                      // « Proches » ouvre la même fenêtre de contacts que le raccourci « Mes proches »
+                      if (label === "Proches") return setCallOpen(true);
                       const route = ROUTES[label];
                       if (route) router.push(route);
                     }}
@@ -753,21 +791,21 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
           </button>
 
           {/* Prochaine prise */}
-          {data.prochainePrise && (
+          {prochainePrise && (
             <section aria-label="Prochaine prise" className="mt-6 flex flex-wrap items-center gap-5 rounded-3xl border border-line bg-white p-5 shadow-card sm:p-6">
               <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
                 <Pill className="h-8 w-8" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-lg font-bold text-muted">Prochaine prise</p>
-                <p className="text-[24px] font-extrabold text-ink">{data.prochainePrise.medicament}</p>
+                <p className="text-[24px] font-extrabold text-ink">{prochainePrise.medicament}</p>
                 <p className="mt-0.5 flex items-center gap-2 text-lg font-semibold text-ok-600">
-                  <Clock className="h-5 w-5" aria-hidden="true" /> Aujourd&apos;hui à {data.prochainePrise.heure}
+                  <Clock className="h-5 w-5" aria-hidden="true" /> Aujourd&apos;hui à {prochainePrise.heure}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setPriseConfirmee(true)}
+                onClick={confirmPrise}
                 disabled={priseConfirmee}
                 className={cx(
                   "flex min-h-16 w-full items-center justify-center gap-2 rounded-2xl px-7 text-[22px] font-extrabold transition-colors sm:w-auto",
@@ -907,7 +945,7 @@ function SeniorAccueil({ data }: { data: SeniorAccueilData }) {
             </div>
 
             <ul className="mt-6 space-y-3">
-              {CONTACTS.map((c) => (
+              {contacts.map((c) => (
                 <li key={c.phone}>
                   <a
                     href={`tel:${c.phone}`}

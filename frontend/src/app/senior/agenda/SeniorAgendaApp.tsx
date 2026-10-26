@@ -9,7 +9,6 @@ import {
   Camera,
   Check,
   ChevronLeft,
-  ChevronRight,
   Clock,
   Loader2,
   LogOut,
@@ -31,7 +30,7 @@ import { VoiceAssistant } from "./VoiceAssistant";
 
 /* ---------- Session du senior ---------- */
 
-const subscribe = (cb: () => void) => {
+export const subscribe = (cb: () => void) => {
   window.addEventListener("sa:senior-logout", cb);
   window.addEventListener("sa:senior-login", cb);
   window.addEventListener("storage", cb);
@@ -51,18 +50,18 @@ export function SeniorAgendaApp() {
 
 /* ---------- Pas de session : connexion par reconnaissance faciale ---------- */
 
-function FaceLoginRequired() {
+export function FaceLoginRequired({ what = "votre agenda" }: { what?: string }) {
   return (
     <main className="flex min-h-screen flex-1 items-center justify-center bg-gradient-to-b from-brand-50 to-canvas px-4 py-10">
       <div className="w-full max-w-md rounded-[28px] border border-line bg-white p-8 text-center shadow-pop">
         <LogoMark className="mx-auto h-12 w-12" />
         <h1 className="mt-5 text-[32px] font-black text-brand-900">Bonjour !</h1>
-        <p className="mt-2 text-[22px] leading-snug text-ink">Pour voir votre agenda, connectez-vous simplement avec votre visage.</p>
+        <p className="mt-2 text-[22px] leading-snug text-ink">Pour voir {what}, connectez-vous simplement avec votre visage.</p>
         <Link
           href="/connexion?espace=senior"
-          className="mt-8 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-600 text-[24px] font-extrabold text-white hover:bg-brand-700"
+          className="mt-8 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-800 px-4 py-3 text-[24px] leading-tight font-extrabold text-white hover:bg-brand-900"
         >
-          <Camera className="h-7 w-7" /> Me connecter avec mon visage
+          <Camera className="h-7 w-7 shrink-0" /> Me connecter avec mon visage
         </Link>
       </div>
     </main>
@@ -163,11 +162,44 @@ function AgendaScreen() {
     }
   }
 
-  async function cancelEvent(item: AgendaItem) {
-    if (!confirm(`Supprimer le rappel « ${item.title} » ?`)) return;
-    await seniorApi.del(`/events/${item.id}`);
-    reload();
+  // Suppression sans boîte de dialogue : le rappel disparaît tout de suite et peut être
+  // rétabli pendant 8 secondes avec un grand bouton « Annuler » (moins anxiogène, plus lisible)
+  const [removing, setRemoving] = useState<AgendaItem | null>(null);
+  const removeTimer = useRef<number | undefined>(undefined);
+  const commitRemoval = useCallback(
+    async (item: AgendaItem) => {
+      window.clearTimeout(removeTimer.current);
+      setRemoving(null);
+      await seniorApi.del(`/events/${item.id}`).catch(() => {});
+      reload();
+    },
+    [reload],
+  );
+
+  function cancelEvent(item: AgendaItem) {
+    if (removing) commitRemoval(removing);
+    setRemoving(item);
+    speak("Rappel supprimé. Vous pouvez encore l'annuler.");
+    removeTimer.current = window.setTimeout(() => commitRemoval(item), 8000);
   }
+
+  function undoRemoval() {
+    window.clearTimeout(removeTimer.current);
+    setRemoving(null);
+    speak("C'est annulé, le rappel est conservé.");
+  }
+
+  // En quittant la page, une suppression en attente est appliquée
+  const removingRef = useRef<AgendaItem | null>(null);
+  useEffect(() => {
+    removingRef.current = removing;
+  }, [removing]);
+  useEffect(
+    () => () => {
+      if (removingRef.current) seniorApi.del(`/events/${removingRef.current.id}`).catch(() => {});
+    },
+    [],
+  );
 
   function logout() {
     stopSpeaking();
@@ -181,13 +213,13 @@ function AgendaScreen() {
     <div className="flex min-h-screen flex-1 flex-col bg-canvas">
       <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-line bg-white px-4 sm:px-8">
         <Link href="/senior/connexion-reussie#accueil" className="flex min-h-14 items-center gap-2.5 rounded-2xl pr-3" aria-label="Revenir à l'accueil">
-          <ChevronLeft className="h-7 w-7 text-brand-600" />
+          <ChevronLeft className="h-7 w-7 text-brand-800" />
           <LogoMark className="h-9 w-9" />
           <span className="hidden text-xl font-extrabold tracking-tight text-brand-900 sm:inline">Accueil</span>
         </Link>
         <div className="flex items-center gap-3">
           {name && <span className="hidden text-lg font-bold text-ink sm:block">{name}</span>}
-          <button onClick={logout} className="flex min-h-14 items-center gap-2 rounded-2xl px-4 text-lg font-bold text-danger-600 hover:bg-danger-50">
+          <button onClick={logout} className="flex min-h-14 items-center gap-2 rounded-2xl px-4 text-lg font-bold text-danger-700 hover:bg-danger-50">
             <LogOut className="h-6 w-6" /> <span className="hidden sm:inline">Quitter</span>
           </button>
         </div>
@@ -205,32 +237,36 @@ function AgendaScreen() {
           <button
             onClick={playBriefing}
             disabled={briefingLoading}
-            className="flex min-h-16 items-center gap-3 rounded-2xl border-2 border-brand-200 bg-white px-5 text-[20px] font-extrabold text-brand-700 hover:bg-brand-50 disabled:opacity-60"
+            className="flex min-h-16 items-center gap-3 rounded-2xl border-2 border-brand-200 bg-white px-5 text-[20px] font-extrabold text-brand-800 hover:bg-brand-50 disabled:opacity-60"
           >
             {briefingLoading ? <Loader2 className="h-7 w-7 animate-spin" /> : <Volume2 className="h-7 w-7" />} Écouter mon programme
           </button>
         </div>
 
-        {/* Navigation entre les jours */}
-        <nav aria-label="Changer de jour" className="mt-6 grid grid-cols-[auto_1fr_auto] items-center gap-3">
-          <button onClick={() => setDay(shiftDay(day, -1))} className="flex min-h-16 items-center gap-1 rounded-2xl bg-white px-4 text-[20px] font-bold text-ink shadow-card hover:bg-brand-50" aria-label="Jour précédent">
-            <ChevronLeft className="h-7 w-7" /> Hier
-          </button>
-          {day !== today ? (
-            <button onClick={() => setDay(today)} className="min-h-16 rounded-2xl bg-brand-50 text-[20px] font-bold text-brand-700 hover:bg-brand-100">
-              Revenir à aujourd&apos;hui
+        {/* Choix du jour : aujourd'hui ou demain (les autres jours se demandent à la voix :
+            « Qu'ai-je prévu jeudi ? ») — moins de boutons, moins d'hésitation */}
+        <div role="group" aria-label="Jour affiché" className="mt-6 grid grid-cols-2 gap-2 rounded-3xl bg-white p-2 shadow-card">
+          {[
+            { iso: today, text: "Aujourd'hui" },
+            { iso: shiftDay(today, 1), text: "Demain" },
+          ].map((d) => (
+            <button
+              key={d.text}
+              onClick={() => setDay(d.iso)}
+              aria-pressed={day === d.iso}
+              className={cx(
+                "min-h-16 rounded-2xl text-[22px] font-extrabold transition-colors",
+                day === d.iso ? "bg-brand-800 text-white" : "text-ink hover:bg-brand-50",
+              )}
+            >
+              {d.text}
             </button>
-          ) : (
-            <span />
-          )}
-          <button onClick={() => setDay(shiftDay(day, 1))} className="flex min-h-16 items-center gap-1 rounded-2xl bg-white px-4 text-[20px] font-bold text-ink shadow-card hover:bg-brand-50" aria-label="Jour suivant">
-            Demain <ChevronRight className="h-7 w-7" />
-          </button>
-        </nav>
+          ))}
+        </div>
 
-        {error && <p className="mt-6 rounded-2xl bg-danger-50 p-5 text-[22px] font-bold text-danger-600">{error}</p>}
+        {error && <p className="mt-6 rounded-2xl bg-danger-50 p-5 text-[22px] font-bold text-danger-700">{error}</p>}
         {!data && !error && (
-          <p className="mt-10 flex items-center justify-center gap-3 text-[22px] text-muted">
+          <p className="mt-10 flex items-center justify-center gap-3 text-[22px] text-ink-soft">
             <Loader2 className="h-7 w-7 animate-spin" /> Chargement…
           </p>
         )}
@@ -242,23 +278,33 @@ function AgendaScreen() {
         )}
         {data && data.items.length > 0 && (
           <ul className="mt-6 space-y-4">
-            {data.items.map((it) => (
+            {data.items.filter((it) => it.id !== removing?.id).map((it) => (
               <AgendaRow key={it.kind + it.id} item={it} now={now} busy={busyId === it.id} onConfirm={() => confirmIntake(it.id)} onCancel={() => cancelEvent(it)} />
             ))}
           </ul>
         )}
       </main>
 
+      {/* Annulation d'une suppression (8 secondes) */}
+      {removing && (
+        <div role="status" className="fixed inset-x-0 bottom-32 z-30 mx-auto flex w-[calc(100%-2rem)] max-w-3xl flex-wrap items-center gap-4 rounded-3xl bg-ink px-6 py-4 text-white shadow-pop">
+          <p className="min-w-0 flex-1 text-[22px] font-bold">Rappel « {removing.title} » supprimé</p>
+          <button onClick={undoRemoval} className="min-h-16 rounded-2xl bg-white px-6 text-[22px] font-extrabold text-brand-900 hover:bg-brand-50">
+            Annuler
+          </button>
+        </div>
+      )}
+
       {/* Actions principales : la voix d'abord */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl gap-3 px-4 py-4 sm:px-6">
           <button
             onClick={() => setVoiceOpen(true)}
-            className="flex min-h-20 flex-1 items-center justify-center gap-3 rounded-3xl bg-brand-600 px-4 text-[24px] font-extrabold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700"
+            className="flex min-h-20 flex-1 items-center justify-center gap-3 rounded-3xl bg-brand-800 px-4 text-[24px] font-extrabold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-900"
           >
             <Mic className="h-8 w-8" /> Créer un rappel à la voix
           </button>
-          <button onClick={() => setAdding(true)} className="flex min-h-20 w-20 shrink-0 items-center justify-center rounded-3xl border-2 border-brand-200 bg-white text-brand-700 hover:bg-brand-50" aria-label="Ajouter un rappel à l'écran">
+          <button onClick={() => setAdding(true)} className="flex min-h-20 w-20 shrink-0 items-center justify-center rounded-3xl border-2 border-brand-200 bg-white text-brand-800 hover:bg-brand-50" aria-label="Ajouter un rappel à l'écran">
             <Plus className="h-9 w-9" />
           </button>
         </div>
@@ -302,23 +348,23 @@ function AgendaRow({ item, now, busy, onConfirm, onCancel }: { item: AgendaItem;
   return (
     <li className={cx("flex flex-wrap items-center gap-4 rounded-3xl border bg-white p-5 shadow-card", due ? "border-brand-300 ring-2 ring-brand-200" : "border-line")}>
       <span className="w-[5.5rem] text-[28px] font-black text-ink">{item.time.replace(":", "h")}</span>
-      <span className={cx("flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl", isPrise ? "bg-ok-50 text-ok-600" : item.type === "rdv" ? "bg-brand-50 text-brand-600" : "bg-warn-50 text-warn-600")}>
+      <span className={cx("flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl", isPrise ? "bg-ok-50 text-ok-700" : item.type === "rdv" ? "bg-brand-50 text-brand-800" : "bg-warn-50 text-warn-700")}>
         <Icon className="h-7 w-7" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[22px] font-extrabold leading-tight text-ink">{isPrise ? item.detail : item.title}</p>
         {(isPrise ? item.note : item.detail) && (
-          <p className="mt-0.5 flex items-center gap-1.5 text-[19px] text-muted">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[19px] text-ink-soft">
             {!isPrise && <MapPin className="h-5 w-5 shrink-0" />}
             {isPrise ? item.note : item.detail}
           </p>
         )}
-        {item.createdBy === "senior" && <p className="mt-0.5 text-[17px] font-semibold text-brand-600">Ajouté par vous</p>}
+        {item.createdBy === "senior" && <p className="mt-0.5 text-[17px] font-semibold text-brand-800">Ajouté par vous</p>}
       </div>
       {isPrise && item.status === "confirme" && <Status tone="ok" icon={<Check className="h-6 w-6" strokeWidth={3} />} label="Pris" />}
       {isPrise && item.status === "manque" && <Status tone="warn" icon={<Clock className="h-6 w-6" />} label="Non confirmé" />}
       {due && (
-        <button onClick={onConfirm} disabled={busy} className="flex min-h-16 items-center gap-2 rounded-2xl bg-ok-500 px-5 text-[22px] font-extrabold text-white hover:bg-ok-600 disabled:opacity-60">
+        <button onClick={onConfirm} disabled={busy} className="flex min-h-16 items-center gap-2 rounded-2xl bg-ok-700 px-5 text-[22px] font-extrabold text-white hover:brightness-90 disabled:opacity-60">
           {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Check className="h-6 w-6" strokeWidth={3} />} Je l&apos;ai pris
         </button>
       )}
@@ -326,7 +372,7 @@ function AgendaRow({ item, now, busy, onConfirm, onCancel }: { item: AgendaItem;
       {!isPrise && (item.status === "fait" || past) && <Status tone="muted" icon={<Check className="h-6 w-6" />} label="Passé" />}
       {!isPrise && !past && item.status === "prevu" && item.createdBy !== "senior" && <Status tone="brand" icon={<Clock className="h-6 w-6" />} label="À venir" />}
       {!isPrise && !past && item.createdBy === "senior" && (
-        <button onClick={onCancel} className="flex min-h-16 items-center gap-2 rounded-2xl px-4 text-[20px] font-bold text-muted hover:bg-danger-50 hover:text-danger-600" aria-label={`Supprimer le rappel ${item.title}`}>
+        <button onClick={onCancel} className="flex min-h-16 items-center gap-2 rounded-2xl px-4 text-[20px] font-bold text-ink-soft hover:bg-danger-50 hover:text-danger-700" aria-label={`Supprimer le rappel ${item.title}`}>
           <Trash2 className="h-6 w-6" /> Supprimer
         </button>
       )}
@@ -339,10 +385,10 @@ function Status({ tone, icon, label }: { tone: "ok" | "warn" | "brand" | "muted"
     <span
       className={cx(
         "flex items-center gap-1.5 rounded-2xl px-4 py-2 text-[20px] font-extrabold",
-        tone === "ok" && "bg-ok-50 text-ok-600",
-        tone === "warn" && "bg-warn-50 text-warn-600",
-        tone === "brand" && "bg-brand-50 text-brand-700",
-        tone === "muted" && "bg-slate-100 text-slate-600",
+        tone === "ok" && "bg-ok-50 text-ok-700",
+        tone === "warn" && "bg-warn-50 text-warn-700",
+        tone === "brand" && "bg-brand-50 text-brand-800",
+        tone === "muted" && "bg-slate-100 text-slate-700",
       )}
     >
       {icon} {label}
@@ -364,8 +410,8 @@ function AddReminder({ defaultDate, onClose, onSaved }: { defaultDate: string; o
     setSaving(true);
     setError("");
     try {
-      await seniorApi.post("/events", { title, date, time, type: "rappel" });
-      speak(`C'est noté : ${title}.`);
+      const res = await seniorApi.post<{ duplicate?: boolean }>("/events", { title, date, time, type: "rappel" });
+      speak(res.duplicate ? `Ce rappel est déjà dans votre agenda : ${title}.` : `C'est noté : ${title}.`);
       onSaved();
     } catch (err) {
       setError(err instanceof SeniorApiError ? err.message : "Impossible d'enregistrer le rappel.");
@@ -379,7 +425,7 @@ function AddReminder({ defaultDate, onClose, onSaved }: { defaultDate: string; o
       <form onSubmit={save} className="w-full max-w-lg rounded-t-[28px] bg-white p-6 shadow-pop sm:rounded-[28px]">
         <div className="flex items-center justify-between">
           <h2 className="text-[28px] font-black text-brand-900">Nouveau rappel</h2>
-          <button type="button" onClick={onClose} className="flex h-16 w-16 items-center justify-center rounded-2xl text-muted hover:bg-canvas" aria-label="Fermer">
+          <button type="button" onClick={onClose} className="flex h-16 w-16 items-center justify-center rounded-2xl text-ink-soft hover:bg-canvas" aria-label="Fermer">
             <X className="h-8 w-8" />
           </button>
         </div>
@@ -397,8 +443,8 @@ function AddReminder({ defaultDate, onClose, onSaved }: { defaultDate: string; o
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required className={field} />
           </label>
         </div>
-        {error && <p className="mt-4 rounded-2xl bg-danger-50 p-4 text-[20px] font-bold text-danger-600">{error}</p>}
-        <button disabled={saving} className="mt-6 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-600 text-[24px] font-extrabold text-white hover:bg-brand-700 disabled:opacity-60">
+        {error && <p className="mt-4 rounded-2xl bg-danger-50 p-4 text-[20px] font-bold text-danger-700">{error}</p>}
+        <button disabled={saving} className="mt-6 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl bg-brand-800 text-[24px] font-extrabold text-white hover:bg-brand-900 disabled:opacity-60">
           {saving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Check className="h-7 w-7" strokeWidth={3} />} Enregistrer le rappel
         </button>
       </form>
@@ -408,9 +454,13 @@ function AddReminder({ defaultDate, onClose, onSaved }: { defaultDate: string; o
 
 /* ---------- Rappels proactifs : vérification toutes les 30 secondes ---------- */
 
+const SNOOZE_MS = 10 * 60 * 1000; // « Plus tard » : le rappel revient 10 minutes après
+const REPEAT_MS = 2 * 60 * 1000; // sans réponse, le rappel est relu toutes les 2 minutes
+
 function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: boolean }) {
   const [queue, setQueue] = useState<Reminder[]>([]);
-  const dismissed = useRef(new Set<string>());
+  // Rappel traité → masqué définitivement ; « Plus tard » → masqué jusqu'à l'heure indiquée
+  const hiddenUntil = useRef(new Map<string, number>());
   const current = paused ? null : queue[0];
 
   useEffect(() => {
@@ -418,7 +468,8 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
     const check = async () => {
       try {
         const res = await seniorApi.get<{ reminders: Reminder[] }>("/reminders/due");
-        if (!cancelled) setQueue(res.reminders.filter((r) => !dismissed.current.has(r.id)));
+        const now = Date.now();
+        if (!cancelled) setQueue(res.reminders.filter((r) => (hiddenUntil.current.get(r.id) ?? 0) < now));
       } catch {}
     };
     check();
@@ -429,17 +480,22 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
     };
   }, []);
 
-  // Le rappel est lu à voix haute dès qu'il s'affiche
+  // Le rappel est lu à voix haute dès qu'il s'affiche, puis relu tant qu'il reste sans réponse
   useEffect(() => {
-    if (current) speak(current.speech, { natural: true });
+    if (!current) return;
+    speak(current.speech, { natural: true });
+    // Les relectures utilisent la voix du navigateur : le quota gratuit de la voix naturelle est limité
+    const t = window.setInterval(() => speak(current.speech), REPEAT_MS);
+    return () => window.clearInterval(t);
   }, [current]);
 
   if (!current) return null;
 
   const close = () => {
-    dismissed.current.add(current.id);
+    hiddenUntil.current.set(current.id, Date.now() + SNOOZE_MS);
     setQueue((q) => q.slice(1));
     stopSpeaking();
+    speak("D'accord, je vous le rappellerai dans 10 minutes.");
   };
 
   async function act() {
@@ -452,7 +508,7 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
         await seniorApi.post(`/events/${current.id}/ack`);
       }
     } finally {
-      dismissed.current.add(current.id);
+      hiddenUntil.current.set(current.id, Number.POSITIVE_INFINITY);
       setQueue((q) => q.slice(1));
       onChange();
     }
@@ -462,21 +518,21 @@ function ReminderWatcher({ onChange, paused }: { onChange: () => void; paused: b
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/60 p-4" role="alertdialog" aria-modal="true" aria-labelledby="rappel-titre">
       <div className="fade-up w-full max-w-lg rounded-[32px] bg-white p-8 text-center shadow-pop">
         <span className="pulse-ring relative mx-auto flex h-24 w-24 items-center justify-center rounded-full text-brand-200">
-          <span className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full bg-brand-600 text-white">
+          <span className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full bg-brand-800 text-white">
             {current.kind === "prise" ? <Pill className="h-12 w-12" /> : <BellRing className="h-12 w-12" />}
           </span>
         </span>
-        <p className="mt-6 text-[22px] font-bold text-muted">{current.time.replace(":", "h")}</p>
+        <p className="mt-6 text-[22px] font-bold text-ink-soft">{current.time.replace(":", "h")}</p>
         <h2 id="rappel-titre" className="text-[32px] font-black leading-tight text-brand-900">
           {current.title}
         </h2>
         <p className="mt-2 text-[26px] font-bold text-ink">{current.detail}</p>
         <div className="mt-8 grid gap-3">
-          <button onClick={act} className="flex min-h-20 items-center justify-center gap-3 rounded-3xl bg-ok-500 text-[26px] font-extrabold text-white hover:bg-ok-600">
+          <button onClick={act} className="flex min-h-20 items-center justify-center gap-3 rounded-3xl bg-ok-700 text-[26px] font-extrabold text-white hover:brightness-90">
             <Check className="h-8 w-8" strokeWidth={3} /> {current.kind === "prise" ? "Je l'ai pris" : "C'est noté"}
           </button>
-          <button onClick={close} className="min-h-16 rounded-3xl text-[22px] font-bold text-muted hover:bg-canvas">
-            Plus tard
+          <button onClick={close} className="min-h-16 rounded-3xl text-[22px] font-bold text-ink-soft hover:bg-canvas">
+            Plus tard (dans 10 minutes)
           </button>
         </div>
       </div>

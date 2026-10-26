@@ -20,7 +20,7 @@ import { Logo, LogoMark } from "@/components/Logo";
 
 const SPACES = [
   {
-    href: "/senior",
+    href: "/connexion?espace=senior",
     title: "Espace Senior",
     text: "Accéder à votre assistant",
     icon: UserRound,

@@ -32,6 +32,12 @@
   --color-danger-50: #fdeced;
   --color-danger-500: #e5484d;
   --color-danger-600: #c53035;
+  /* Interface Senior : teintes foncées garantissant un contraste ≥ 7:1 (WCAG AAA, cahier des charges) */
+  --color-ok-700: #0d5c33;
+  --color-warn-700: #6e4500;
+  --color-danger-700: #9b1c22;
+  --color-ink-soft: #3d4a63;
+
   --color-violet-50: #f1edff;
   --color-violet-500: #7c5cfc;
 

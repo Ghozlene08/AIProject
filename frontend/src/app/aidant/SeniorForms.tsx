@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CheckCircle2, HeartHandshake, ScanFace, Trash2, User, UserPlus } from "lucide-react";
+import { Camera, CheckCircle2, HeartHandshake, Plus, ScanFace, Trash2, User, UserPlus } from "lucide-react";
 import { api, assetUrl as backendAssetUrl } from "@/lib/api";
 import type { Senior } from "@/lib/types";
-import { Button, Card, ErrorBox, Field, Input, Modal, Textarea } from "@/components/ui";
+import { Button, Card, ErrorBox, Field, Input, Modal, Textarea, Toggle } from "@/components/ui";
 import { useSenior } from "./SeniorContext";
 
 /* ------------------------------------------------------------------ */
@@ -181,6 +181,50 @@ function SeniorFields({ form, setForm }: { form: FormState; setForm: (f: FormSta
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Proches (création du profil)                                        */
+/* ------------------------------------------------------------------ */
+
+type ProcheDraft = { key: number; name: string; relation: string; phone: string; isEmergency: boolean };
+
+let procheKey = 0;
+const emptyProche = (): ProcheDraft => ({ key: ++procheKey, name: "", relation: "", phone: "", isEmergency: false });
+const isBlank = (p: ProcheDraft) => !p.name.trim() && !p.relation.trim() && !p.phone.trim();
+
+// Proches que le senior peut appeler (fenêtre « Qui appeler ? ») ; modifiables ensuite dans « Profil du senior »
+function ProchesFields({ proches, setProches }: { proches: ProcheDraft[]; setProches: (p: ProcheDraft[]) => void }) {
+  const update = (key: number, patch: Partial<ProcheDraft>) => setProches(proches.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="pt-2 text-sm font-extrabold uppercase tracking-wide text-brand-600">Proches à contacter</p>
+        <p className="text-xs text-muted">Le senior pourra les appeler d&apos;un geste. Les contacts d&apos;urgence sont prévenus en cas de SOS.</p>
+      </div>
+      {proches.map((p, i) => (
+        <div key={p.key} className="rounded-xl border border-line p-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Nom">{(id) => <Input id={id} value={p.name} onChange={(e) => update(p.key, { name: e.target.value })} placeholder="Ex. : Thomas Martin" />}</Field>
+            <Field label="Lien">{(id) => <Input id={id} value={p.relation} onChange={(e) => update(p.key, { relation: e.target.value })} placeholder="Ex. : fils, voisine…" />}</Field>
+            <Field label="Téléphone">{(id) => <Input id={id} type="tel" value={p.phone} onChange={(e) => update(p.key, { phone: e.target.value })} />}</Field>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-3 text-sm font-semibold text-ink">
+              <Toggle label={`Contact d'urgence ${i + 1}`} checked={p.isEmergency} onChange={(v) => update(p.key, { isEmergency: v })} />
+              Contact d&apos;urgence
+            </label>
+            <Button type="button" variant="ghost" onClick={() => setProches(proches.filter((x) => x.key !== p.key))}>
+              <Trash2 className="h-4 w-4" /> Retirer
+            </Button>
+          </div>
+        </div>
+      ))}
+      <Button type="button" variant="ghost" onClick={() => setProches([...proches, emptyProche()])}>
+        <Plus className="h-4 w-4" /> Ajouter un proche
+      </Button>
+    </div>
+  );
+}
+
 // Après la création : le senior se connecte uniquement par reconnaissance faciale
 export function FaceSetupResult({ senior }: { senior: Senior }) {
   const ready = Boolean(senior.photoUrl);
@@ -214,15 +258,27 @@ function useCreateSenior(onDone?: () => void) {
   const [form, setForm] = useState<FormState>(toForm());
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<{ senior: Senior } | null>(null);
+  const [result, setResult] = useState<{ senior: Senior; contactsFailed?: number } | null>(null);
+  const [proches, setProches] = useState<ProcheDraft[]>(() => [emptyProche()]);
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
+    // Les lignes vides sont ignorées ; une ligne commencée doit avoir un nom et un téléphone
+    const filled = proches.filter((p) => !isBlank(p));
+    if (filled.some((p) => !p.name.trim() || !p.phone.trim())) {
+      setError("Chaque proche doit avoir un nom et un numéro de téléphone.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
       const res = await api.post<{ senior: Senior }>("/aidant/seniors", toFormData(form));
-      setResult(res);
+      const saved = await Promise.allSettled(
+        filled.map(({ name, relation, phone, isEmergency }, order) =>
+          api.post(`/aidant/seniors/${res.senior._id}/contacts`, { name: name.trim(), relation: relation.trim(), phone: phone.trim(), isEmergency, order }),
+        ),
+      );
+      setResult({ ...res, contactsFailed: saved.filter((s) => s.status === "rejected").length });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -237,10 +293,20 @@ function useCreateSenior(onDone?: () => void) {
     }
     setResult(null);
     setForm(toForm());
+    setProches([emptyProche()]);
     onDone?.();
   }
 
-  return { form, setForm, error, saving, result, submit, finish };
+  return { form, setForm, proches, setProches, error, saving, result, submit, finish };
+}
+
+function ContactsWarning({ failed }: { failed?: number }) {
+  if (!failed) return null;
+  return (
+    <p role="alert" className="rounded-xl bg-warn-50 p-3 text-sm font-semibold text-warn-600">
+      {failed === 1 ? "Un proche n'a pas pu être enregistré" : `${failed} proches n'ont pas pu être enregistrés`} : ajoutez-le depuis « Profil du senior ».
+    </p>
+  );
 }
 
 export function Onboarding() {
@@ -258,6 +324,7 @@ export function Onboarding() {
         {c.result ? (
           <div className="space-y-5">
             <FaceSetupResult senior={c.result.senior} />
+            <ContactsWarning failed={c.result.contactsFailed} />
             <Button className="w-full" size="lg" onClick={c.finish}>
               Accéder au tableau de bord
             </Button>
@@ -265,6 +332,7 @@ export function Onboarding() {
         ) : (
           <form onSubmit={c.submit} className="space-y-5">
             <SeniorFields form={c.form} setForm={c.setForm} />
+            <ProchesFields proches={c.proches} setProches={c.setProches} />
             <ErrorBox>{c.error}</ErrorBox>
             <Button type="submit" size="lg" className="w-full" loading={c.saving}>
               <UserPlus className="h-5 w-5" /> Créer le profil
@@ -282,7 +350,7 @@ export function CreateSeniorModal({ open, onClose }: { open: boolean; onClose: (
     <Modal
       open={open}
       onClose={c.result ? c.finish : onClose}
-      title={c.result ? "Profil créé" : "Ajouter un proche"}
+      title={c.result ? "Profil créé" : "Ajouter un senior"}
       wide
       footer={
         c.result ? (
@@ -300,10 +368,14 @@ export function CreateSeniorModal({ open, onClose }: { open: boolean; onClose: (
       }
     >
       {c.result ? (
-        <FaceSetupResult senior={c.result.senior} />
+        <div className="space-y-4">
+          <FaceSetupResult senior={c.result.senior} />
+          <ContactsWarning failed={c.result.contactsFailed} />
+        </div>
       ) : (
         <div className="space-y-4">
           <SeniorFields form={c.form} setForm={c.setForm} />
+          <ProchesFields proches={c.proches} setProches={c.setProches} />
           <ErrorBox>{c.error}</ErrorBox>
         </div>
       )}

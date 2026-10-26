@@ -47,16 +47,26 @@ export function useVoiceCapture() {
   const [level, setLevel] = useState(0);
   const [interim, setInterim] = useState("");
   const stopRef = useRef<(() => void) | null>(null);
+  // Le micro reste ouvert pendant toute la conversation (plus rapide, pas de nouvelle autorisation
+  // à chaque tour) ; il est libéré à la fermeture de l'assistant (release) ou au démontage.
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const release = useCallback(() => {
+    stopRef.current?.();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, []);
 
   const listen = useCallback(async (): Promise<Capture> => {
     setInterim("");
     let browserText = "";
     const recognition = getRecognition();
 
-    let stream: MediaStream | null = null;
-    if (canRecord()) {
+    let stream: MediaStream | null = streamRef.current?.active ? streamRef.current : null;
+    if (!stream && canRecord()) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        streamRef.current = stream;
       } catch {
         stream = null; // micro refusé : on tente la reconnaissance du navigateur seule
       }
@@ -78,7 +88,6 @@ export function useVoiceCapture() {
           recognition?.stop();
         } catch {}
         const done = () => {
-          stream?.getTracks().forEach((t) => t.stop());
           ctx?.close().catch(() => {});
           setListening(false);
           setLevel(0);
@@ -147,9 +156,9 @@ export function useVoiceCapture() {
   }, []);
 
   const stop = useCallback(() => stopRef.current?.(), []);
-  useEffect(() => () => stopRef.current?.(), []);
+  useEffect(() => release, [release]);
 
-  return { listen, stop, listening, level, interim };
+  return { listen, stop, release, listening, level, interim };
 }
 
 /* ---------- Synthèse vocale ---------- */

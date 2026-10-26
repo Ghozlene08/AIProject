@@ -102,6 +102,7 @@ const sn = Router();
 sn.get("/me", requireSenior, senior.me);
 sn.get("/agenda", requireSenior, senior.agenda);
 sn.get("/briefing", requireSenior, senior.briefing);
+sn.get("/contacts", requireSenior, senior.contacts); sn.get("/medications", requireSenior, senior.medications);
 sn.get("/reminders/due", requireSenior, senior.dueReminders);
 sn.post("/intakes/:id/confirm", requireSenior, senior.confirmIntake);
 sn.post("/events", requireSenior, senior.createEvent);
